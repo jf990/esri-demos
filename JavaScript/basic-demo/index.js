@@ -11,7 +11,7 @@ require([
     "esri/views/MapView",
     "esri/layers/FeatureLayer"
 ], function(esriConfig, Map, MapView, FeatureLayer) {
-    esriConfig.apiKey = MY_API_KEY; // this is loaded from secret.js so my API key is not public :)
+    esriConfig.apiKey = YOUR_API_KEY; // this is loaded from secret.js so my API key is not public :)
 
     // Choose the basemap, see https://developers.arcgis.com/javascript/latest/api-reference/esri-Map.html#basemap
     const map = new Map({
