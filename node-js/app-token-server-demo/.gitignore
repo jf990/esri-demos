@@ -1,0 +1,3 @@
+# Files ignored:
+.env
+.ArcGISTokenCache.json

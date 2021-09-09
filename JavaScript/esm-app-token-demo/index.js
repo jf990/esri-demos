@@ -1,9 +1,8 @@
 /**
- * ArcGIS API for JavaScript demo app.
- * This app fill the `appDiv` element in index.html with the map app that searches the map for places
+ * ArcGIS API for JavaScript demo app using application credentials and a server component.
+ * This app fills the `appDiv` element in index.html with the map app that searches the map for places
  * and then finds the 3 closest places to the location clicked on the map.
  */
-import esriConfig from "@arcgis/core/config";
 import Map from "@arcgis/core/Map";
 import MapView from "@arcgis/core/views/MapView";
 import Graphic from "@arcgis/core/Graphic";
@@ -15,17 +14,13 @@ import * as locator from "@arcgis/core/rest/locator";
 import IdentityManager from "@arcgis/core/identity/IdentityManager";
 import Axios from "axios";
 
-import { apiKey, clientID, clientSecret, arcgisUserId } from "./secret";
-
-// esriConfig.apiKey = apiKey;
 let tokenExpiration = null;
 let lastGoodToken = null;
 
 const mapStartLocation = [-123.18586, 49.24824];
 const locatorUrl = "http://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer";
 const closestFacilityUrl = "https://route-api.arcgis.com/arcgis/rest/services/World/ClosestFacility/NAServer/ClosestFacility_World/solveClosestFacility/";
-const appTokenBaseURL = "https://www.arcgis.com/sharing/rest";
-const appTokenURL = appTokenBaseURL + "/oauth2/token/";
+const appTokenURL = "http://localhost:3080/auth"; // The URL of the token server
 
 const startSymbol = {
     type: "simple-marker",
@@ -133,7 +128,7 @@ function setupMapView() {
     function findFacilities(pt, refresh) {
         mapView.popup.close();
         addStart(pt);
-        requestApplicationToken()
+        requestApplicationToken() // if the token expired this will refresh it
         .then(function(response) {
             if (refresh) {
                 // Add facilities
@@ -272,14 +267,11 @@ function requestApplicationToken() {
             resolve(lastGoodToken);
             return;
         }
-        // generate a token with your client id and client secret
-        const params = new URLSearchParams();
-        params.append('f', 'json');
-        params.append('client_id', clientID);
-        params.append('client_secret', clientSecret);
-        params.append('grant_type', 'client_credentials');
-        params.append('expiration', '1440');
-        Axios.post(appTokenURL, params)
+        // Send a request to our authentication endpoint
+        let session_id = 1234; // @TODO the same server should assign a session id to each session request.
+        Axios.post(appTokenURL, {
+            nonce: session_id
+        })
         .then(function(response) {
             const responseData = response.data;
             if (typeof responseData.error != "undefined") {
@@ -293,10 +285,10 @@ function requestApplicationToken() {
                 tokenExpiration = new Date(Date.now() + (responseData.expires_in * 1000));
                 IdentityManager.registerToken({
                     expires: responseData.expires_in,
-                    server: appTokenBaseURL,
+                    server: responseData.appTokenBaseURL,
                     ssl: true,
                     token: responseData.access_token,
-                    userId: arcgisUserId
+                    userId: responseData.arcgisUserId
                 });
                 resolve(lastGoodToken);
             }
@@ -307,14 +299,21 @@ function requestApplicationToken() {
     });
 };
 
+/**
+ * When we receive an error, replace the map with the error details.
+ * @param {object} error The error received from a failed API call.
+ */
+function showErrorMessage(error) {
+    const app = document.getElementById("appDiv");
+    if (app) {
+        app.innerHTML = "<h3>Cannot create map view</h3><p>Received error from the auth service:</p><p>" + JSON.stringify(error) + "</p>";
+    }
+};
+
 requestApplicationToken()
 .then(function(response) {
-    console.log("got token ", response);
     setupMapView();
 })
 .catch(function(error) {
-    console.log("Error", error);
+    showErrorMessage(error);
 });
-
-
-// @TODO: user token

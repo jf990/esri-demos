@@ -1,9 +1,8 @@
 /**
- * ArcGIS API for JavaScript demo app using API keys.
- * This app fill the `appDiv` element in index.html with the map app that searches the map for places
+ * ArcGIS API for JavaScript demo app with OAuth user login.
+ * This app fills the `appDiv` element in index.html with the map app that searches the map for places
  * and then finds the 3 closest places to the location clicked on the map.
  */
-import esriConfig from "@arcgis/core/config";
 import Map from "@arcgis/core/Map";
 import MapView from "@arcgis/core/views/MapView";
 import Graphic from "@arcgis/core/Graphic";
@@ -12,11 +11,10 @@ import FeatureSet from "@arcgis/core/rest/support/FeatureSet";
 import ClosestFacilityParameters from "@arcgis/core/rest/support/ClosestFacilityParameters";
 import * as closestFacility from "@arcgis/core/rest/closestFacility";
 import * as locator from "@arcgis/core/rest/locator";
+import IdentityManager from "@arcgis/core/identity/IdentityManager";
+import OAuthInfo from "@arcgis/core/identity/OAuthInfo";
 
-import { apiKey } from "./secret";
-
-esriConfig.apiKey = apiKey;
-
+import { clientID } from "./secret";
 const mapStartLocation = [-123.18586, 49.24824];
 const locatorUrl = "http://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer";
 const closestFacilityUrl = "https://route-api.arcgis.com/arcgis/rest/services/World/ClosestFacility/NAServer/ClosestFacility_World/solveClosestFacility/";
@@ -253,4 +251,35 @@ function setupMapView() {
     }
 }
 
-setupMapView();
+function configureApp() {
+
+    const oauthInfo = new OAuthInfo({
+        appId: clientID,
+        popup: false
+    });
+    IdentityManager.registerOAuthInfos([oauthInfo]);
+
+    IdentityManager.checkSignInStatus(oauthInfo.portalUrl + "/sharing")
+    .then(function(userCredential) {
+        document.getElementById("userId").innerText = userCredential.userId;
+        document.getElementById("personalizedPanel").style.display = "block";
+        setupMapView();
+    })
+    .catch(function(error) {
+        // Anonymous view
+        document.getElementById("loginPanel").style.display = "block";
+        document.getElementById("loginMessage").innerText = "You are not logged in. " + error.toString();
+    });
+
+    document.getElementById("sign-in").addEventListener("click", function() {
+        // Redirect to OAuth Sign In page
+        IdentityManager.getCredential(oauthInfo.portalUrl + "/sharing");
+    });
+
+    document.getElementById("sign-out").addEventListener("click", function() {
+        IdentityManager.destroyCredentials();
+        window.location.reload();
+    });
+};
+
+configureApp();

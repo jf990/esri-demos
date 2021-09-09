@@ -1,8 +1,8 @@
 # ArcGIS resources
 
-* [ArcGIS Platform Cheat Sheet](arcgis-cheat-sheet.md)
-
+* [Awesome ArcGIS Developer](https://github.com/Esri/awesome-arcgis-developer)
 * [ArcGIS Developer website](https://developers.arcgis.com)
+* [ArcGIS Platform Cheat Sheet](arcgis-cheat-sheet.md)
 
 ## Blogs
 

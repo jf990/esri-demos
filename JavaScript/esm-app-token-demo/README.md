@@ -1,144 +1,61 @@
-# JavaScript demo using Vite bundler
+# JavaScript demo using application token authentication
 
-This demo project will use ArcGIS API for JavaScript with Vite to produce a browser app.
-This demonstrates how to use ESM, or [JavaScript Modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules) in a very simple and easy to use Node.js project.
+This project will demonstrate how to use [ArcGIS Platform application credentials](https://developers.arcgis.com/documentation/mapping-apis-and-services/security/application-credentials/) with your [ArcGIS API for JavaScript](https://developers.arcgis.com/javascript/latest/) app. Application credentials provide different advantages when compared with API keys and OAuth user login authentication:
 
-There are a lot of good programing practices preferring modules over traditional `<script>` tags. This project tries to demonstrate modules while most of the [ArcGIS Platform examples](https://developers.arcgis.com/javascript/latest/display-a-map/) use `<script>` tags for simplicity. To learn more, see [Why use modules instead of script tags](https://hacks.mozilla.org/2015/08/es6-in-depth-modules/).
+1. Application credentials will require a server process to negotiate credentials with ArcGIS Platform. Is is considered insecure and highly risky to embed your app credentials in a client app, as your credentials could easily be hijacked. For some workflows, adding a server component adds a significant amount of complexity to building, testing, and deploying your app.
+2. Application credentials are short-lived tokens, expiring at most in 2 weeks, and require refreshing. API keys never expire.
+3. Application credentials are considered more secure than API keys since the client app must request a token from your server when needed and that token will expire and require refreshing on the server. Since API keys never time out and you embed them in your client app, if they are compromised your only recourse is to revoke the API key, generate a new one, and rebuild and deploy your app with the new key.
+4. Application credentials scope to all of the read-access privileges of the application owner. API keys can be scoped to specific services.
+5. You cannot use application credentials to create or update content.
 
-Also for simplicity, I chose to use [Vite](https://vitejs.dev/guide/) for the module bundler. This was a recommendation from [@odoe](https://github.com/odoe) and [@hhkaos](https://github.com/hhkaos) that actually turned out to work. Vite is the least amount of friction and learning of all the many [options for module bundling](https://openbase.com/categories/js/best-javascript-bundler-libraries).
+This project is the same demo as [ESM API key demo](../esm-api-key-demo/) only using application credentials to authenticate instead of API keys. This project also requires a server. I provided two implementations: one using [Node.js app-token-server-demo](../../node-js/app-token-server-demo/) and another with [PHP app-server-token-demo](../../php/app-token-server-demo/).
+This project uses [Axios](https://axios-http.com/) as the HTTP client to request the token from the server, but leaves some specific application framework security issues open as they are beyond the scope of this particular demonstration.
 
-## Create a map project
+## Run the server
 
-1. Create a new folder and create a new node project:
+Follow the instructions to install and run one of the server apps:
+
+* [Node.js app-token-server-demo](../../node-js/app-token-server-demo/)
+* [PHP app-server-token-demo](../../php/app-token-server-demo/)
+
+## Installation
+
+1. Clone or fork this repository and `cd` into the `JavaScript/esm-app-token-demo`, or copy all the files in `JavaScript/esm-app-token-demo` into a new folder.
+2. Install the dependencies:
 
 ```bash
-mkdir vite-demo
-cd vite-demo
-npm init
+npm install
 ```
 
-2. Install dependencies for [Vite](https://vitejs.dev/guide/) and [ArcGIS API for JavaScript](https://developers.arcgis.com/javascript/latest/):
-
-```bash
-npm install --save-dev vite
-npm install @arcgis/core@next
-```
-
-3. Create `index.html`:
-
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>ArcGIS Map with JavaScript</title>
-    <link rel="stylesheet" type="text/css" href="index.css" />
-</head>
-<body>
-  <div id="appDiv"></div>
-  <script type="module" src="/index.js"></script>
-</body>
-</html>
-```
-
-4. Create `index.css`:
-
-```css
-@import "https://js.arcgis.com/4.21/@arcgis/core/assets/esri/themes/dark/main.css";
-
-html,
-body,
-#appDiv {
-    padding: 0;
-    margin: 0;
-    height: 100%;
-    width: 100%;
-}
-```
-
-5. Create `index.js`:
+3. Open `index.js` in your editor. Update the token URL to the location you are running the token server.
 
 ```javascript
-import esriConfig from "@arcgis/core/config";
-import Map from "@arcgis/core/Map";
-import MapView from "@arcgis/core/views/MapView";
-
-const map = new Map({
-    basemap: "arcgis-topographic"
-});
-
-const mapView = new MapView({
-    map,
-    container: "appDiv",
-    center: [-118.805, 34.027],
-    zoom: 13
-});
+const appTokenURL = "http://localhost:3080/auth"; // The URL of the token server
 ```
 
-6. Go to your developer dashboard at https://developers.arcgis.com/dashboard, copy your default API key or create a new one and copy it. Create secret.js file to hold your API key and replace `YOUR_API_KEY` with your copied key. Create a `.gitignore` file and add `secret.js` to it so that you do not commit this file to version control.
-
-Create `secret.js`
-
-```javascript
-export const apiKey = "YOUR_API_KEY";
-```
-
-Create `.gitignore`
-
-```ini
-secret.js
-```
-
-7. Update `index.js` to get your API key from the secrets:
-
-```javascript
-import esriConfig from "@arcgis/core/config";
-import Map from "@arcgis/core/Map";
-import MapView from "@arcgis/core/views/MapView";
-import { apiKey } from "./secret";
-
-esriConfig.apiKey = apiKey;
-```
-
-8. Update package.json
-
-```json
-  "main": "index.js",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "serve": "vite preview"
-  },
-```
-
-9. You are now ready to build and run the project.
+4. Run the app.
 
 ```bash
-npm run dev
+npm start
 ```
 
-when the build is complete Vite will display a message on the console:
+Open a web browser to the location indicated on the console:
 
-```bash
-  vite v2.5.0 dev server running at:
+```txt
+vite vx.x.x dev server running at:
 
   > Local: http://localhost:3000/
 ```
 
-Open a browser to `http://localhost:3000/` and observe your map.
+Open a web browser at that URL to display your app.
 
-### Create an app token
+![screenshot closest facility routing app](closest-facility.png)
 
-You can use [application credentials](https://developers.arcgis.com/documentation/mapping-apis-and-services/security/application-credentials/) to access content and services.
+## Troubleshooting
 
-**Advantages**
+A lot can go wrong with this demo, it requires a lot of things to work exactly right.
 
-* short-lived, will expire and require refreshing the token.
-* scoped to all privileges of the subscribing user.
-* requires an application definition on the server.
-* Uses secure OAuth 2.0 protocol with server.
-
-**Disadvantages**
-
-* ?
+1. Verify the server app is running and is able to generate tokens. Check to make sure the **client ID** and **client secret** are set to your application properties.
+2. Check to make sure the server is running at the URL you think it is and the client app can connect to that URL. You can try a tool like Postman to test the connection and that the server is responding.
+3. If the app runs but the map does not show then your token server is not working or it is not able to generate valid tokens.
+4. If the map shows but you cannot perform closest facility routing then your ArcGIS user account does not have sufficient privileges to perform this service.
