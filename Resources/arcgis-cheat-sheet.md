@@ -12,6 +12,8 @@ This is not a free trial, but a perpetually free subscription that gives you a b
 
 Visit https://developers.arcgis.com/features/ and click through the list of capabilities and see if you can make use of those. Each capability leads to demo apps, sample code, and further details about each service and how to use it.
 
+Check out [Awesome ArcGIS Developer](https://github.com/Esri/awesome-arcgis-developer), a collection of resources to help you with ArcGIS Platform development, APIs, SDKs, tools, and location services.
+
 ## Getting started
 
 When you're ready to get hands-on, here are the first 4 self-paced tutorials (10-15-min each) we recommend you use for getting started:
@@ -29,8 +31,8 @@ If you are a web developer, or have some experience with JavaScript, try these:
 * Change the basemap layer: https://developers.arcgis.com/javascript/latest/change-the-basemap-layer/
 * Search for an address: https://developers.arcgis.com/javascript/latest/search-for-an-address/
 * Find places: https://developers.arcgis.com/javascript/latest/find-places/
-               
-There are hundreds more short tutorials, most under 15 minutes each:
+
+There are hundreds of short tutorials, most under 15 minutes each:
 
 https://developers.arcgis.com/documentation/mapping-apis-and-location-services/tutorials/
 
