@@ -1,0 +1,22 @@
+{
+    "name": "cesium-get-started-demo",
+    "version": "1.0.0",
+    "description": "Get started with CesiumJS and ArcGIS location services",
+    "main": "index.js",
+    "scripts": {
+      "start": "node rundev.js",
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "devDependencies": {
+      "express": "^4.17.2",
+      "serve-static": "^1.14.2"
+    },
+    "keywords": ["javascript", "arcgis", "cesium", "3d"],
+    "author": "John Foster",
+    "license": "Apache-2.0",
+    "bugs": {
+      "url": "https://github.com/jf990/esri-demos/issues"
+    },
+    "homepage": "https://developers.arcgis.com"
+  }
+  
