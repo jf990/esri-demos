@@ -1,13 +1,13 @@
 # JavaScript demo using OAuth 2.0 and ArcGIS Identity
 
-This project will demonstrate how to use [ArcGIS Platform user login with OAuth 2.0]https://developers.arcgis.com/documentation/mapping-apis-and-services/security/oauth-2.0/) with your [ArcGIS API for JavaScript](https://developers.arcgis.com/javascript/latest/) app. ArcGIS Identity provides different advantages when compared with API keys and application credentials authentication:
+This project will demonstrate how to use [ArcGIS identity with OAuth 2.0]https://developers.arcgis.com/documentation/mapping-apis-and-services/security/oauth-2.0/) with an [ArcGIS API for JavaScript](https://developers.arcgis.com/javascript/latest/) app. ArcGIS identity provides different advantages when compared with API keys and application credentials authentication:
 
-1. User login with OAuth 2.0 is considered the most secure of the [three ArcGIS Platform authentication techniques](https://developers.arcgis.com/documentation/mapping-apis-and-services/security/#authentication-methods).
+1. A user login with OAuth 2.0 is considered the most secure of the [three ArcGIS authentication techniques](https://developers.arcgis.com/documentation/mapping-apis-and-services/security/#authentication-methods).
 2. OAuth 2.0 is well seasoned and universally implemented by most PaaS and SaaS platforms.
-3. It requires the user to log in with an account on ArcGIS Platform or ArcGIS Online, and that account has the required privileges to perform the authentication actions of the app.
+3. It requires the user to log in with an ArcGIS account (ArcGIS Platform, ArcGIS Online, or ArcGIS Enterprise), and that account has the required privileges to access the location services of the app.
 4. There are no secrets or personally identifiable information stored in the client app.
 
-This project is the same demo as [ESM API key demo](../esm-api-key-demo/) only using user credentials to authenticate instead of API keys. To understand how this app was developed review the [README](../esm-api-key-demo/) for that project. I will only cover the differences here.
+This project is the same demo as [ESM API key demo](../esm-api-key-demo/) only using user credentials to authenticate instead of API keys. To understand how this app was developed using ES modules, review the [README](../esm-api-key-demo/) for that project. I will only cover the differences here.
 
 ## Installation
 
@@ -21,8 +21,9 @@ npm install
 3. Go to your [developer dashboard](https://developers.arcgis.com/applications) and get your app's **client ID**.
     - If you do not have an ArcGIS Developer account you can [create on for free](https://developers.arcgis.com/sign-up).
     - If you have an existing OAuth 2.0 app definition you can use it. Otherwise create a new application and save it. Copy the **client ID**. NOTE: you will also need to update the **Redirect URLs** section to add a redirect URL to your running app. We will go over that in a later step.
+    - To learn more about application registration, [visit the tutorial](https://developers.arcgis.com/documentation/mapping-apis-and-services/security/tutorials/register-your-application/).
 
-4. Rename `secret.sample.js` to `secret.js`. Edit this file and replace `YOUR_CLIENT_ID` with your client ID.
+4. Rename `secret.sample.js` to `secret.js`. Edit this file and replace `YOUR_CLIENT_ID` with your **client ID**.
 
 ```javascript
 export const clientID = "YOUR_CLIENT_ID";
@@ -53,7 +54,7 @@ At this point note the URL you app is running at and copy it. In this case it is
 
 ![screenshot app with sign in link](sign-in.png)
 
-Clicking the link redirects to an ArcGIS Platform login screen. This screen may show different information depending on your logged in state.
+Clicking the link redirects to an ArcGIS login screen running at arcgis.com. This screen may show different information depending on your logged in state.
 
 ![screenshot app sign in screen](sso-login.png)
 

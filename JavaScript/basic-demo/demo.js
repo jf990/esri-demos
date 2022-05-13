@@ -3,7 +3,7 @@
  * code found on https://developers.arcgis.com/javascript/latest/.
  * 
  * You can run demo.html in a browser, but it may work better if loaded from a webserver.
- * I provided `npm start` script that runs a local development server with express.js.
+ * See the accompanying `npm start` script that runs a local development server with express.js.
  */
 
  require([

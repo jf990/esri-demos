@@ -6,38 +6,17 @@
 import Map from "@arcgis/core/Map";
 import MapView from "@arcgis/core/views/MapView";
 import Graphic from "@arcgis/core/Graphic";
-import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
+import Point from "@arcgis/core/geometry/Point";
+import * as route from "@arcgis/core/rest/route";
+import RouteParameters from "@arcgis/core/rest/support/RouteParameters";
 import FeatureSet from "@arcgis/core/rest/support/FeatureSet";
-import ClosestFacilityParameters from "@arcgis/core/rest/support/ClosestFacilityParameters";
-import * as closestFacility from "@arcgis/core/rest/closestFacility";
-import * as locator from "@arcgis/core/rest/locator";
 import IdentityManager from "@arcgis/core/identity/IdentityManager";
 import OAuthInfo from "@arcgis/core/identity/OAuthInfo";
 
 import { clientID } from "./secret";
-const mapStartLocation = [-123.18586, 49.24824];
-const locatorUrl = "http://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer";
-const closestFacilityUrl = "https://route-api.arcgis.com/arcgis/rest/services/World/ClosestFacility/NAServer/ClosestFacility_World/solveClosestFacility/";
-
-const startSymbol = {
-    type: "simple-marker",
-    color: "red",
-    size: "10px",
-    outline: {
-        color: "black",
-        width: "2px",
-    },
-};
-
-const facilitySymbol = {
-    type: "simple-marker",
-    color: "black",
-    size: "11px",
-    outline: {
-        color: "white",
-        width: "1px",
-    },
-};
+const mapStartLocation = new Point([-116.5414418, 33.8258333]);
+const demoDestination = new Point([-116.3697003, 33.7062298]);
+const routeUrl = "https://route-api.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World";
 
 const routeSymbol = {
     type: "simple-line",
@@ -45,210 +24,109 @@ const routeSymbol = {
     width: "5",
 };
 
-// Define searchable places
-const places = [
-    {category: "Gas station", icon: "gas-station"},
-    {category: "College", icon: "school"},
-    {category: "Grocery", icon: "grocery-store"},
-    {category: "Hotel", icon: "hotel"},
-    {category: "Hospital", icon: "hospital"},
-    {category: "Police station", icon: "police-station"}
-];
-let placeCategory = places[0].category;
-
-function getPlaceIconName(category) {
-    for (let i = 0; i < places.length; i += 1) {
-        if (places[i].category == category) {
-            return places[i].icon;
+function addGraphic(type, point, view) {
+    const graphic = new Graphic({
+      symbol: {
+        type: "simple-marker",
+        color: (type === "start") ? "green" : "red",
+        size: "12px",
+        outline: {
+            color: "black",
+            width: "2px",
         }
+      },
+      geometry: point
+    });
+    view.graphics.add(graphic);
+}
+
+function getRoute(view) {
+
+    const routeParams = new RouteParameters({
+      stops: new FeatureSet({
+        features: view.graphics.toArray()
+      }),
+      returnDirections: true
+    });
+
+    function showRoutes(routes) {
+        routes.forEach((result) => {
+          result.route.symbol = routeSymbol;
+          view.graphics.add(result.route,0);
+        });
     }
-    return "";
+
+    function showDirections(directions) {
+        function showRouteDirections(directions) {
+            const directionsList = document.createElement("ol");
+            directions.forEach((result,i) => {
+                const direction = document.createElement("li");
+                direction.innerHTML = result.attributes.text + ((result.attributes.length > 0) ? " (" + result.attributes.length.toFixed(2) + " miles)" : "");
+                directionsList.appendChild(direction);
+            });
+            directionsElement.appendChild(directionsList);
+        }
+
+        const directionsElement = document.createElement("div");
+        directionsElement.innerHTML = "<h3>Directions</h3>";
+        directionsElement.classList = "esri-widget esri-widget--panel esri-directions__scroller directions";
+        directionsElement.style.marginTop = "0";
+        directionsElement.style.padding = "0 15px";
+        directionsElement.style.minHeight = "365px";
+
+        showRouteDirections(directions);
+
+        view.ui.empty("top-right");
+        view.ui.add(directionsElement, "top-right");
+    }
+
+    route.solve(routeUrl, routeParams)
+      .then((response) => {
+        showRoutes(response.routeResults)
+        showDirections(response.routeResults[0].directions.features);
+      })
+      .catch((error) => {
+        console.log(error);
+      });
 }
 
 function setupMapView() {
-    const routeLayer = new GraphicsLayer();
-    const facilitiesLayer = new GraphicsLayer();
-    const selectedFacilitiesLayer = new GraphicsLayer();
-    const startLayer = new GraphicsLayer();
-
-    // Build the place select UI
-    const select = document.createElement("select", "");
-    select.setAttribute("class", "esri-widget esri-select");
-    select.setAttribute(
-        "style",
-        "width: 175px; font-family: 'Avenir Next'; font-size: 1em"
-    );
-
-    places.forEach((place) => {
-        const option = document.createElement("option");
-        option.value = place.category;
-        option.innerHTML = place.category;
-        select.appendChild(option);
-    });
-
-    select.addEventListener("change", (event) => {
-        placeCategory = event.target.value;
-        findFacilities(startLayer.graphics.getItemAt(0).geometry, true);
-    });
 
     const map = new Map({
-        basemap: "arcgis-navigation",
-        layers: [routeLayer, facilitiesLayer, selectedFacilitiesLayer, startLayer]
+        basemap: "arcgis-navigation"
     });
 
     const mapView = new MapView({
         map,
         container: "appDiv",
         center: mapStartLocation,
-        zoom: 12,
+        zoom: 11,
         constraints: {
             snapToZoom: false
         }
     });
-    mapView.popup.actions = [];
 
-    mapView.ui.add(select, "top-right");
     mapView.when(() => {
-        addStart(mapView.center);
-        findFacilities(mapView.center, true);
+        // create a demo route once the view is loaded
+        addGraphic("start", mapView.center, mapView);
+        setTimeout(() => {
+            addGraphic("finish", demoDestination, mapView);
+            getRoute(mapView);
+        }, 1000);
     });
 
-    mapView.on("click", (event)=> {
-        mapView.hitTest(event).then((response)=> {
-            if (response.results.length === 1) {
-                findFacilities(event.mapPoint, false);
-            }
-        });
+    mapView.on("click", (event) => {
+        if (mapView.graphics.length === 0) {
+            addGraphic("start", event.mapPoint, mapView);
+          } else if (mapView.graphics.length === 1) {
+            addGraphic("finish", event.mapPoint, mapView);
+            getRoute(mapView);
+          } else {
+            mapView.graphics.removeAll();
+            mapView.ui.empty("top-right");
+            addGraphic("start", event.mapPoint, mapView);
+          }
     });
-
-    // Find places and add them to the map
-    function findFacilities(pt, refresh) {
-        mapView.popup.close();
-        addStart(pt);
-        if (refresh) {
-            // Add facilities
-            locator.addressToLocations(locatorUrl, {
-                location: pt,
-                searchExtent: mapView.extent,
-                categories: [placeCategory],
-                maxLocations: 25,
-                outFields: ["Place_addr", "PlaceName"],
-                outSpatialReference: mapView.spatialReference
-            })
-            .then((results)=> {
-                facilitiesLayer.removeAll();
-                routeLayer.removeAll();
-                selectedFacilitiesLayer.removeAll();
-                if (results.length > 0) {
-                    // Add graphics
-                    showFacilities(results);
-                    // Find closest place
-                    findClosestFacility(startLayer.graphics.getItemAt(0), facilitiesLayer.graphics);
-                }
-            });
-        } else {
-            findClosestFacility(startLayer.graphics.getItemAt(0), facilitiesLayer.graphics);
-        }
-    }
-
-    function addStart(pt) {
-        startLayer.graphics.removeAll();
-        startLayer.add(new Graphic({
-            geometry: pt,
-            symbol: startSymbol
-        }));
-    }
-
-    function findClosestFacility(startGraphic, facilityGraphics) {
-        routeLayer.removeAll();
-        selectedFacilitiesLayer.removeAll();
-        let params = new ClosestFacilityParameters({
-            incidents: new FeatureSet({
-                features: [startGraphic],
-            }),
-            facilities: new FeatureSet({
-                features: facilityGraphics.toArray(),
-            }),
-            returnRoutes: true,
-            returnFacilities: true,
-            defaultTargetFacilityCount: 3,
-        });
-
-        closestFacility.solve(closestFacilityUrl, params).then(
-            (results) => {
-                results.routes.forEach((route, i)=> {
-                    // Add closest route
-                    route.symbol = routeSymbol;
-                    routeLayer.add(route);
-                    // Add closest facility
-                    const facility = results.facilities[route.attributes.FacilityID - 1];
-                    addSelectedFacility(i + 1, facility.latitude, facility.longitude, route.attributes);
-                });
-            },
-            (error) => {
-                console.log(error.details);
-            }
-        );
-    }
-
-    function showFacilities(results) {
-        results.forEach((result,i)=> {
-            facilitiesLayer.add(
-                new Graphic({
-                    attributes: result.attributes,
-                    geometry: result.location,
-                    symbol: {
-                        type: "web-style",
-                        name: getPlaceIconName(placeCategory),
-                        styleName: "Esri2DPointSymbolsStyle",
-                    },
-                    popupTemplate: {
-                        title: "{PlaceName}",
-                        content: "{Place_addr}" +
-                            "<br><br>" +
-                            result.location.longitude.toFixed(5) +
-                            "," +
-                            result.location.latitude.toFixed(5)
-                    },
-                })
-            );
-        });
-    }
-
-    function addSelectedFacility(number, latitude, longitude, attributes) {
-        selectedFacilitiesLayer.add(new Graphic({
-            symbol: {
-                type: "simple-marker",
-                color: [255, 255, 255,1.0],
-                size: 18,
-                outline: {
-                    color: [50,50,50],
-                    width: 1
-                }
-            },
-            geometry: {
-                type: "point",
-                latitude: latitude,
-                longitude: longitude
-            },
-            attributes: attributes
-        }));
-        selectedFacilitiesLayer.add(new Graphic({
-            symbol: {
-                type: "text",
-                text: number,
-                font: { size: 11, weight: "bold" },
-                yoffset: -4,
-                color: [50,50,50]
-            },
-            geometry: {
-                type: "point",
-                latitude: latitude,
-                longitude: longitude
-            },
-            attributes: attributes
-        }));
-    }
 }
 
 function configureApp() {
@@ -263,6 +141,7 @@ function configureApp() {
     .then(function(userCredential) {
         document.getElementById("userId").innerText = userCredential.userId;
         document.getElementById("personalizedPanel").style.display = "block";
+        // once user is logged in we can show map and route
         setupMapView();
     })
     .catch(function(error) {
