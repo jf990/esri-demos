@@ -6,7 +6,7 @@ Learn more about [ArcGIS application credentials](https://developers.arcgis.com/
 
 ## The problem
 
-If you use ArcGIS Platform and need a more secure authentication method than API keys, application credentials are a possible choice. This uses an OAuth type handshake with the ArcGIS services to request an authentication token and use it to authenticate services in your client app. However, you do not want to bake in your `clientID` and `clientSecret` in a client app as that could expose your credentials to hijacking. If a nefarious entity gets hold of your credentials they can create tokens on your behalf. To avoid that, your client app requests authentication tokens from an app like this one. The token also expires requiring frequent refreshing and updating the client app with valid tokens.
+If you use ArcGIS and need a more secure authentication method than API keys, application credentials are a possible choice. This uses an OAuth type handshake with the ArcGIS services to request an authentication token and use it to authenticate services in your client app. However, you do not want to bake in your `clientID` and `clientSecret` in a client app as that could expose your credentials to hijacking. If a nefarious entity gets hold of your credentials they can create tokens on your behalf. To avoid that, your client app requests authentication tokens from an app like this one. The token also expires requiring frequent refreshing and updating the client app with valid tokens. It is also expected your server will run on HTTPS.
 
 ## Install
 
