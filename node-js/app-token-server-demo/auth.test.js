@@ -208,8 +208,8 @@ test("getToken gets a token from the cache", async () => {
 
     expect.assertions(6);
     return arcgisAppAuth.getToken().then(function(token) {
-        expect(token.access_token).toEqual(mockGoodResponse.access_token);
-        expect(token.expires_in).toEqual(mockGoodResponse.expires_in);
+        expect(token.access_token).not.toEqual(mockGoodResponse.access_token);
+        expect(token.expires_in).not.toEqual(mockGoodResponse.expires_in);
         expect(token.appTokenBaseURL).toEqual(configuration.appTokenBaseURL);
         expect(token.arcgisUserId.length).toBeGreaterThan(0);
         expect(fs.existsSync(configuration.cacheFile)).toBeTruthy();

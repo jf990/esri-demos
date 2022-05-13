@@ -59,23 +59,27 @@ function getCachedToken() {
                 response += chunk;
             });
             cache.on("end", function() {
-                const cachedToken = JSON.parse(response);
-                if (cachedToken == null) {
-                    reject(new Error("Invalid token."));
-                } else {
-                    // @TODO determine if this token is still good or it expired
-                    const now = new Date();
-                    const expires = cachedToken.expiresDate;
-                    const dateExpires = new Date(expires);
-                    const timeDiff = cachedToken.expiresDate - Date.now();
-                    const isExpired = Date.now() > cachedToken.expiresDate;
-                    const timeDiffStr = Math.floor(timeDiff / (1000 * 60 * 60)) + ":" + (Math.floor(timeDiff / (1000 * 60)) % 60) + ":" + Math.floor(timeDiff / 1000) % 60;
-                    // console.log(`Date now ${now}; expires ${dateExpires}; diff: ${timeDiffStr}; isExpired: ${isExpired.toString()}`);
-                    if (isExpired) {
-                        reject(new Error("Token expired."));
+                try {
+                    const cachedToken = JSON.parse(response);
+                    if (cachedToken == null) {
+                        reject(new Error("Invalid token."));
                     } else {
-                        resolve(cachedToken);
+                        // @TODO determine if this token is still good or it expired
+                        const now = new Date();
+                        const expires = cachedToken.expiresDate;
+                        const dateExpires = new Date(expires);
+                        const timeDiff = cachedToken.expiresDate - Date.now();
+                        const isExpired = Date.now() > cachedToken.expiresDate;
+                        const timeDiffStr = Math.floor(timeDiff / (1000 * 60 * 60)) + ":" + (Math.floor(timeDiff / (1000 * 60)) % 60) + ":" + Math.floor(timeDiff / 1000) % 60;
+                        // console.log(`Date now ${now}; expires ${dateExpires}; diff: ${timeDiffStr}; isExpired: ${isExpired.toString()}`);
+                        if (isExpired) {
+                            reject(new Error("Token expired."));
+                        } else {
+                            resolve(cachedToken);
+                        }
                     }
+                } catch (exception) {
+                    reject(new Error("Could not parse response as JSON: " + response.toString()));
                 }
             });
         } catch(error) {
