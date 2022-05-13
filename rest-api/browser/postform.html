@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>REST Request with HTML form</title>
+  </head>
+  <body>
+  <h1>Geocode form</h1>
+  <form method="GET" action="https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates">
+      <label for="SingleLine">Point of interest:</label><input type="text" name="SingleLine">
+      <input type="hidden" name="category" value="POI">
+      <input type="hidden" name="outFields" value="PlaceName,Place_addr,Phone,URL,Type">
+      <input type="hidden" name="maxLocations" value="5">
+      <input type="hidden" name="f" value="json">
+      <input type="hidden" name="forStorage" value="false">
+      <input type="submit" value="Post">
+  </form>
+  </body>
+</html>

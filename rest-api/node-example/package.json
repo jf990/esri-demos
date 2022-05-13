@@ -1,0 +1,36 @@
+{
+  "name": "arcgis-rest-js-example",
+  "version": "1.0.0",
+  "description": "An example project to demonstrate using ArcGIS REST JS with Node.JS",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jf990/arcgis-demos.git"
+  },
+  "keywords": [
+    "arcgis",
+    "rest",
+    "javascript",
+    "node",
+    "esri"
+  ],
+  "author": "John Foster",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/jf990/arcgis-demos/issues"
+  },
+  "homepage": "https://github.com/jf990/arcgis-demos#readme",
+  "dependencies": {
+    "@esri/arcgis-rest-auth": "^2.8.1",
+    "@esri/arcgis-rest-geocoding": "^2.8.1",
+    "@esri/arcgis-rest-request": "^2.8.1",
+    "@esri/arcgis-rest-routing": "^2.8.1",
+    "cross-fetch": "^3.0.4",
+    "dotenv": "^8.2.0",
+    "isomorphic-form-data": "^2.0.0"
+  }
+}

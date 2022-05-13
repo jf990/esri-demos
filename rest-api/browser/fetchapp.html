@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>REST request with JavaScript fetch</title>
+  </head>
+  <body>
+  <h1>Geocode form</h1>
+  <form>
+      <label for="SingleLine">Point of interest:</label><input type="text" id="SingleLine" name="SingleLine">
+      <button id="requestButton">Request</button>
+  </form>
+  <div>
+      <p id="response"></p>
+  </div>
+  <script>
+
+  // Set the click event handler to make the fetch request
+  document.getElementById("requestButton").addEventListener("click", (clickEvent) => {
+    const singleLine = document.getElementById("SingleLine").value;
+    if (singleLine.trim().length > 0) {
+        fetchRequest(singleLine.trim());
+    } else {
+        document.getElementById("response").innerText = "Enter a value to search for";
+    }
+    event.preventDefault();
+  });
+
+  // Perform geocode request using fetch and put the response on the page.
+  function fetchRequest(singleLine) {
+    const responseElement = document.getElementById("response");
+    const url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
+    const parameters = {
+      f: "json",
+      forStorage: "false",
+      category: "POI",
+      outFields: "PlaceName,Place_addr,Phone,URL,Type",
+      maxLocations: "5",
+      SingleLine: singleLine
+    };
+    fetch(url + "?" + parametersToQueryFormat(parameters), {
+      method: "POST"
+    }).then(response => {
+      if (response.ok) {
+        if (response.status == 200) {
+            response.json().then(jsonObject => {
+              responseElement.innerText = JSON.stringify(jsonObject);
+            });
+        } else {
+          responseElement.innerText = "There was an error: " + response.status;
+          response.json().then(jsonObject => {
+            responseElement.innerText = responseElement.innerText + ": " + JSON.stringify(jsonObject);
+          });
+        }
+      } else {
+        responseElement.innerText = "There was an error: " + response.status;
+      }
+    })
+    .catch(exception => {
+        responseElement.innerText = "There was an exception: " + exception.toString();
+    })
+  }
+
+  /**
+   * Helper function to convert an object into URL safe query string parameters.
+   */
+  function parametersToQueryFormat(parameters) {
+    let queryParameters = "";
+    for (const key in parameters) {
+      queryParameters += (queryParameters.length > 0 ? "&" : "") + key + "=" + encodeURIComponent(parameters[key]);
+    }
+    return queryParameters;
+  }
+
+  /**
+   * Helper function to convert an object into URL safe form data.
+   */
+  function parametersToFormData(parameters) {
+    let formData = new FormData();
+    for (const key in parameters) {
+      formData.append(key, encodeURIComponent(parameters[key]));
+    }
+    return formData;
+  }
+
+  </script>
+  </body>
+</html>

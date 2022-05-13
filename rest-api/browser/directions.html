@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>REST request with JavaScript fetch</title>
+  </head>
+  <body>
+  <h1>Directions form</h1>
+  <form>
+      <label for="SingleLine">Start:</label><input type="text" id="startAddress" name="startAddress">
+      <label for="SingleLine">End:</label><input type="text" id="endAddress" name="endAddress">
+      <button id="requestButton">Get Directions</button>
+  </form>
+  <div>
+      <p id="response"></p>
+  </div>
+  <script>
+
+  // Set the click event handler to make the fetch request
+  document.getElementById("requestButton").addEventListener("click", (clickEvent) => {
+    const startAddress = document.getElementById("startAddress").value.trim();
+    const endAddress = document.getElementById("endAddress").value.trim();
+    if (startAddress.length > 0 && endAddress.length > 0) {
+        fetchDirections(startAddress, endAddress);
+    } else {
+        document.getElementById("response").innerText = "Enter a start and end address";
+    }
+    event.preventDefault();
+  });
+
+// Get directions between 2 addresses
+  function fetchDirections(startAddress, endAddress) {
+    const responseElement = document.getElementById("response");
+    fetchGeocode(startAddress)
+    .then(startAddressResponse => {
+      fetchGeocode(endAddress)
+      .then(endAddressResponse => {
+        const stops = {
+          "type":"features",
+          "features":  [
+              {
+              "geometry": {
+                "x": startAddressResponse.candidates[0].location.x,
+                "y": startAddressResponse.candidates[0].location.y,
+                "spatialReference": {
+                  "wkid": "4326"
+                }
+              },
+              "attributes": {
+                "Name": startAddressResponse.candidates[0].address
+              }
+            },
+            {
+              "geometry": {
+                "x": endAddressResponse.candidates[0].location.x,
+                "y": endAddressResponse.candidates[0].location.y,
+                "spatialReference": {
+                  "wkid": "4326"
+                }
+              },
+              "attributes": {
+                "Name": endAddressResponse.candidates[0].address
+              }
+            }
+          ]
+        };
+        fetchRoute(stops)
+        .then(directionsResponse => {
+          responseElement.innerText = JSON.stringify(directionsResponse);
+        })
+        .catch(exception => {
+          responseElement.innerText = "There was a routing exception: " + exception.toString();
+        })
+      })
+      .catch(exception => {
+        responseElement.innerText = "There was a geocode exception: " + exception.toString();
+      })
+    })
+  }
+
+  // Perform geocode request using fetch and put the response on the page.
+  function fetchGeocode(singleLine) {
+    return new Promise(function(resolve, reject) {
+      const url = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
+      const parameters = {
+        f: "json",
+        forStorage: "false",
+        category: "POI",
+        outFields: "PlaceName,Place_addr,Phone,URL,Type",
+        maxLocations: "1",
+        SingleLine: singleLine
+      };
+      fetch(url + "?" + parametersToQueryFormat(parameters), {
+        method: "POST"
+      }).then(response => {
+        if (response.ok && response.status == 200) {
+          response.json().then(jsonObject => {
+            resolve(jsonObject);
+          });
+        } else {
+          reject(new Error("Geocode error: " + response.status));
+        }
+      })
+      .catch(exception => {
+        reject(new Error("Geocode exception: " + exception.toString()));
+      })
+    });
+  }
+
+  // Perform routing request using fetch and put the response on the page.
+  function fetchRoute(stops) {
+    return new Promise(function(resolve, reject) {
+      const url = "https://route.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World/solve";
+      const parameters = {
+        f: "json",
+        token: "",
+        stops: JSON.stringify(stops)
+      };
+      fetch(url, {
+        method: "POST",
+        body: parametersToFormData(parameters)
+      }).then(response => {
+        if (response.ok) {
+          if (response.status == 200) {
+              response.json().then(jsonObject => {
+                resolve(jsonObject);
+              });
+          } else {
+            reject(new Error("Geocode error: " + response.status));
+          }
+        } else {
+          reject(new Error("Geocode error: " + response.status));
+        }
+      })
+      .catch(exception => {
+        reject(new Error("Geocode exception: " + exception.toString()));
+      })
+    });
+  }
+
+  /**
+   * Helper function to convert an object into URL safe query string parameters.
+   */
+  function parametersToQueryFormat(parameters) {
+    let queryParameters = "";
+    for (const key in parameters) {
+      queryParameters += (queryParameters.length > 0 ? "&" : "") + key + "=" + encodeURIComponent(parameters[key]);
+    }
+    return queryParameters;
+  }
+
+  /**
+   * Helper function to convert an object into URL safe form data.
+   */
+  function parametersToFormData(parameters) {
+    let formData = new FormData();
+    for (const key in parameters) {
+      formData.append(key, parameters[key]);
+    }
+    return formData;
+  }
+
+  </script>
+  </body>
+</html>
