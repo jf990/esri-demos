@@ -1,5 +1,17 @@
 .DS_Store
 *.zip
+*.env
+.vscode/*
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
 
 # Logs
 logs
