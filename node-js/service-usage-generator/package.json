@@ -1,0 +1,29 @@
+{
+    "name": "arcgis-service-usage-generator",
+    "version": "1.0.0",
+    "description": "Generate ArcGIS service usage on an API key for testing purposes",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js",
+        "test": "echo No tests available.",
+        "usage": "node serviceLog.js",
+        "report": "node serviceUsageReport.js"
+    },
+    "keywords": [
+        "tiles",
+        "arcgis",
+        "map",
+        "imagery"
+    ],
+    "author": "jf",
+    "license": "ISC",
+    "dependencies": {
+        "@esri/arcgis-rest-portal": "^4.1.0",
+        "@esri/arcgis-rest-request": "^4.1.1",
+        "dotenv": "^16.0.3",
+        "isomorphic-form-data": "^2.0.0",
+        "node-fetch": "^3.2.10",
+        "yargs": "^17.6.0"
+    }
+}

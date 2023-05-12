@@ -1,0 +1,47 @@
+{
+    "services": {
+        "basemap": {
+            "standard-style": "https://basemaps-api.arcgis.com/arcgis/rest/services/styles/{STYLE}?type=style&token={ACCESS_TOKEN}",
+            "standard-tile": "https://basemaps-api.arcgis.com/arcgis/rest/services/World_Basemap_v2/VectorTileServer/tile/{LOD}/{Y}/{X}.pbf?token={ACCESS_TOKEN}",
+            "enhanced-style": "https://cdn.arcgis.com/sharing/rest/content/items/{ITEMID}/resources/styles/root.json?f=json&token={ACCESS_TOKEN}",
+            "enhanced-tile": "https://basemaps.arcgis.com/arcgis/rest/services/World_Basemap_v2/VectorTileServer/tile/{LOD}/{Y}/{X}.pbf?token={ACCESS_TOKEN}",
+        },
+        "geocode": {
+            "standard": "https://geocode-api.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?{parameters}",
+            "enhanced": "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?{parameters}"
+        },
+        "simple-route": {
+            "standard": "https://route-api.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World/solve?{parameters}",
+            "enhanced": "https://route.arcgis.com/arcgis/rest/services/World/Route/NAServer/Route_World/solve?{parameters}"
+        },
+        "fleet-route": {
+            "enhanced": "https://logistics.arcgis.com/arcgis/rest/services/World/VehicleRoutingProblemSync/GPServer/EditVehicleRoutingProblem/execute?{parameters}"
+        },
+        "closest-facility": {
+            "standard": "https://route-api.arcgis.com/arcgis/rest/services/World/ClosestFacility/NAServer/ClosestFacility_World/solveClosestFacility?{parameters}",
+            "enhanced": "https://route.arcgis.com/arcgis/rest/services/World/ClosestFacility/NAServer/ClosestFacility_World/solveClosestFacility?{parameters}"
+        },
+        "service-area": {
+            "standard": "https://route-api.arcgis.com/arcgis/rest/services/World/ServiceAreas/NAServer/ServiceArea_World/solveServiceArea?{parameters}",
+            "enhanced": "https://route.arcgis.com/arcgis/rest/services/World/ServiceAreas/NAServer/ServiceArea_World/solveServiceArea?{parameters}"
+        },
+        "travel-cost-matrix": {
+            "standard": "https://route-api.arcgis.com/arcgis/rest/services/World/OriginDestinationCostMatrix/NAServer/OriginDestinationCostMatrix_World/solveODCostMatrix?{parameters}",
+            "enhanced": "https://route.arcgis.com/arcgis/rest/services/World/OriginDestinationCostMatrix/NAServer/OriginDestinationCostMatrix_World/solveODCostMatrix?{parameters}"
+        },
+        "location-allocation": {
+            "enhanced": "https://logistics.arcgis.com/arcgis/rest/services/World/LocationAllocation/GPServer/SolveLocationAllocation/submitJob?{parameters}"
+        },
+        "demographics": {
+            "standard": "https://geoenrich.arcgis.com/arcgis/rest/services/World/geoenrichmentserver/Geoenrichment/enrich?{parameters}",
+            "enhanced": "https://geoenrich.arcgis.com/arcgis/rest/services/World/geoenrichmentserver/Geoenrichment/enrich?{parameters}"
+        },
+        "hosted-feature-service": {
+            "trails": "https://services.arcgis.com/2ycVue24EK6qzjat/arcgis/rest/services/PS_trails/FeatureServer/0"
+        }
+    }
+}
+
+https://cdn.arcgis.com/sharing/rest/content/items/7dc6cea0b1764a1f9af2e679f642f0f5/resources/styles/root.json?f=json&token=AAPK710d141698fa4e05951daacbfe1b572bkpwMDyFMgUuGhYK804yBdPiS8Jx6k4X5zOuUOc1VS4ipt33keZKqL9asjecTsbip
+https://basemaps.arcgis.com/arcgis/rest/services/World_Basemap_v2/VectorTileServer?f=json&token=AAPK710d141698fa4e05951daacbfe1b572bkpwMDyFMgUuGhYK804yBdPiS8Jx6k4X5zOuUOc1VS4ipt33keZKqL9asjecTsbip
+https://basemaps.arcgis.com/arcgis/rest/services/World_Basemap_v2/VectorTileServer/tile/1/1/1.pbf?token=AAPK710d141698fa4e05951daacbfe1b572bkpwMDyFMgUuGhYK804yBdPiS8Jx6k4X5zOuUOc1VS4ipt33keZKqL9asjecTsbip
