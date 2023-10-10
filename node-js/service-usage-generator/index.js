@@ -26,14 +26,18 @@ const testSwitches = {
     places: false,
     routing: false,
     suggest: false,
-    tiles: true,
-    useDev: false,
-    useEnhancedServices: true,
-    useOceansImageryTiles: false
+    tiles: false,
+    nonExistingTiles: false,
+    useDev: true,
+    useEnhancedServices: false,
+    useOceansImageryTiles: false,
+    iterations: 20,
+    tileRequestDelay: 150,
+    serviceRequestDelay: 350,
+    startLOD: 5,
+    endLOD: 6,
+    tileService: ["vector"] // select any of "image", "vector", "hillshade", or "OSM"
 };
-const tileService = ["vector"]; // select any of "image", "vector", "hillshade", or "OSM"
-const startLOD = 6;
-const endLOD = 6;
 
 const tileServices = {
     basemapId: "ArcGIS:Topographic",
@@ -64,12 +68,10 @@ const geocodingServiceHosts = {
 }
 const placesServiceHosts = {
     dev: "https://placesdev-api.arcgis.com",
-    prod: "https://placesdev-api.arcgis.com",
+    prod: "https://places-api.arcgis.com",
     enhancedDev: "https://placesdev-api.arcgis.com",
-    enhancedProd: "https://placesdev-api.arcgis.com"
+    enhancedProd: "https://places-api.arcgis.com"
 }
-const tileRequestWait = 150;
-const serviceRequestWait = 1500;
 
 let token = null;
 let authentication = null;
@@ -196,7 +198,7 @@ function getTileServiceURL(service) {
         return basemapTileURL;
     }
 }
- 
+
 /**
  * Fetch a single tile for a given map tile service.
  * @param {string} tileServiceURL The base URL of the tile service.
@@ -278,7 +280,7 @@ async function fetchVectorTiles(tileServiceURL, lod) {
                 return;
             }
             fetchVectorTile(tileServiceURL, lod, x, y);
-            await new Promise(resolve => setTimeout(resolve, tileRequestWait));
+            await new Promise(resolve => setTimeout(resolve, testSwitches.tileRequestDelay));
         }
     }
 }
@@ -296,9 +298,33 @@ async function fetchVectorTiles(tileServiceURL, lod) {
                 return;
             }
             fetchImageTile(tileServiceURL, lod, x, y);
-            await new Promise(resolve => setTimeout(resolve, tileRequestWait));
+            await new Promise(resolve => setTimeout(resolve, testSwitches.tileRequestDelay));
         }
     }
+}
+
+/**
+ * Fetch a tile we know does not exist.
+ * @param {string} tileServiceURL Indicate the URL of the tile service you wish to query.
+ */
+async function fetchNonExistingVectorTiles(tileServiceURL) {
+    const lod = 63;
+    const x = 0;
+    const y = 0;
+    fetchVectorTile(tileServiceURL, lod, x, y);
+    await new Promise(resolve => setTimeout(resolve, testSwitches.tileRequestDelay));
+}
+
+/**
+ * Fetch a tile we know does not exist.
+ * @param {string} tileServiceURL Indicate the URL of the tile service you wish to query.
+ */
+async function fetchNonExistingImageTiles(tileServiceURL) {
+    const lod = 63;
+    const x = 0;
+    const y = 0;
+    fetchImageTile(tileServiceURL, lod, x, y);
+    await new Promise(resolve => setTimeout(resolve, testSwitches.tileRequestDelay));
 }
 
 /**
@@ -335,6 +361,39 @@ async function generateTileUsage(service, startLOD, endLOD) {
             fetchVectorTiles(tileServiceURL, lod);
         }
     }
+}
+
+/**
+ * Generate tile usage requests for the given service on tiles we know do not exist.
+ * @param {string|Array} service Indicate which tile service you wish to query, either "vector", "image", "hillshade", or "OSM".
+ * @param {integer} interval Number of milliseconds between requests to be nice to the servers.
+ * @param {integer} count Total number of requests to make.
+ */
+async function generateNonExistingTileUsage(service, interval, count) {
+    if (Array.isArray(service)) {
+        service.map(function(tileService) {
+            generateNonExistingTileUsage(tileService, interval, count);
+        })
+        return;
+    }
+    const tileServiceURL = getTileServiceURL(service);
+    let hitsRemaining = count;
+    process.stdout.write(`Generating ${count} tile requests on ${tileServiceURL} for tiles we expect do not exist.\n`);
+    reportedServiceURL = true;
+
+    async function requestNonExistingTileUsage() {
+        if (service == "image" || service == "hillshade") {
+            await fetchNonExistingImageTiles(tileServiceURL);
+        } else {
+            await fetchNonExistingVectorTiles(tileServiceURL);
+        }
+        hitsRemaining -= 1;
+        if (hitsRemaining > 0) {
+            setTimeout(requestNonExistingTileUsage, interval);
+        }
+    }
+
+    requestNonExistingTileUsage();
 }
 
 /**
@@ -482,9 +541,12 @@ function placesRequest() {
     const placesURL = placesService + "/arcgis/rest/services/places-service/v1/places/near-point";
     const placesParameters = {
         f: "json",
-        x: -3.1883,
-        y: 55.9533,
-        categoryids: ["1300"],
+        x: -74.006792,
+        y: 40.71164,
+        radius: 650,
+        categoryIds: "13000",
+        pageSize: 20,
+        searchText: "bar",
         forStorage: false,
         token: token
     };
@@ -789,36 +851,40 @@ async function runUsageTest() {
     if (token != null || authentication != null) {
         reportedServiceURL = false;
         if (testSwitches.tiles) {
-            generateTileUsage(tileService, startLOD, endLOD);
+            generateTileUsage(testSwitches.tileService, testSwitches.startLOD, testSwitches.endLOD);
+            reportedServiceURL = false;
+        }
+        if (testSwitches.nonExistingTiles) {
+            generateNonExistingTileUsage(testSwitches.tileService, testSwitches.serviceRequestDelay, testSwitches.iterations);
             reportedServiceURL = false;
         }
         if (testSwitches.places) {
-            placesUsageGenerator(serviceRequestWait, 4);
+            placesUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);
             reportedServiceURL = false;
         }
         if (testSwitches.geocode) {
-            geocodeUsageGenerator(serviceRequestWait, 4);
+            geocodeUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);
             reportedServiceURL = false;
         }
         if (testSwitches.suggest) {
-            geocodeSuggestUsageGenerator(serviceRequestWait, 4);
+            geocodeSuggestUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);
             reportedServiceURL = false;
         }
         if (testSwitches.geoenrichment) {
-            geoEnrichmentUsageGenerator(serviceRequestWait, 4);
+            geoEnrichmentUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);
             reportedServiceURL = false;
         }
         if (testSwitches.routing) {
-            routingUsageGenerator(serviceRequestWait, 4);    
+            routingUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);    
             reportedServiceURL = false;
         }
         if (testSwitches.featureQuery) {
-            featureQueryUsageGenerator(serviceRequestWait, 4);    
+            featureQueryUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);    
             reportedServiceURL = false;
         }
         if (testSwitches.analysis) {
             reportedServiceURL = false;
-            spatialAnalysisUsageGenerator(serviceRequestWait, 4);    
+            spatialAnalysisUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);    
         }
     } else {
         process.stderr.write(`Cannot authenticate. Verify your authentication configuration.\n`);
@@ -826,39 +892,3 @@ async function runUsageTest() {
 }
 
 runUsageTest();
-
-
-
-// @todo: What is url format for https://ibasemaps-api.arcgis.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tilemap/17/68448/39584/32/32
-
-/**
- * new places service:
- * https://placesdev-api.arcgis.com/arcgis/rest/services/places-service/v1/places/near-point?x=-3.1883&y=55.9533&categoryids=13002&token=
- */
-// po_testing1 on August 3 7:45 AM
-// have 6,862 tiles on key, 6,954 tiles total
-// made 274 requests to Oceans
-
-// HermanMunster on August 3 at 3:00 PM
-// 4 geocode ✅ 
-// 4 suggest ❌ 
-// 274 Raster tile requests to Oceans ❌ https://ibasemaps-api.arcgis.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/
-// 274 vector tile requests to Vector ✅ https://basemaps-api.arcgis.com/arcgis/rest/services/World_Basemap_v2/VectorTileServer/tile/
-// 274 vector tile requests to Imagery ✅ https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/
-// 274 vector tile requests to Hillshade ❌ https://ibasemaps-api.arcgis.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/ 
-
-/**
- * 3/20
- * Generating tile usage on https://basemaps.arcgis.com/arcgis/rest/services/World_Basemap_v2/VectorTileServer/tile/ for tile range 8-8
- * Processed 63782 requests in 9670.722 seconds. There were 1 errors.
- *
- * 3/21
- * Generating tile usage on https://basemaps-api.arcgis.com/arcgis/rest/services/World_Basemap_v2/VectorTileServer/tile/ for tile range 6-6
-Fetched style https://basemaps-api.arcgis.com/arcgis/rest/services/styles/ArcGIS:Topographic?type=style
-Fetched tile 6/63/63
-
-Processed 3970 requests in 601.341 seconds. There were 0 errors.
-
-enhanced imagery tile server https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/5/9/4
-ocean https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/5/9/11
- */

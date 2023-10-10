@@ -1,6 +1,6 @@
 # ArcGIS service usage generator
 
-The purpose of this project is to generate usage against ArcGIS services. I use this to test the services are working properly and the correct usage metering is taking place.
+The purpose of this project is to generate usage against ArcGIS services. It really is not designed to test the service itself, rather use a set of pre-determined parameters to generate usage. I use this to test the services are generating usage properly and the correct usage metering is taking place.
 The intent of this project is to test and verify expected service usage, it is not intended to be a production app.
 
 ## Set up
@@ -11,25 +11,80 @@ The intent of this project is to test and verify expected service usage, it is n
 
 3. Edit `index.js` to set up the tests you want to run and any parameters to control the test.
 
+    - All of the tests are pre-configured and coded to run specific hard-coded tests to generate usage. If you are trying to test something specific you probably have to edit the code.
+
     - Select which tile service(s) you want to test, and the levels of detail range. The higher the LOD the more tiles, and therefore the longer the test will run.
 
     - Select which services you want to test.
 
     ```javascript
     const testSwitches = {
-        analysis: true,
+        analysis: false,
         featureEdit: false,
         featureQuery: false,
         geocode: false,
         geoenrichment: false,
+        places: false,
         routing: false,
         suggest: false,
         tiles: false,
+        nonExistingTiles: true,
         useDev: false,
         useEnhancedServices: false,
-        useOceansImageryTiles: false
+        useOceansImageryTiles: false,
+        iterations: 25000,
+        tileRequestDelay: 150,
+        serviceRequestDelay: 350
     };
     ```
+
+    useDev:
+    Set to `true` to use the Dev/DevExt endpoints, otherwise set to `false` to use the production endpoints (there are no tests for QA.)
+
+    useEnhancedServices:
+    Set to `true` to use the enhanced endpoints instead of the ArcGIS Platform `-api` endpoints.
+
+    iterations:
+    The number of times to hit the service. 25 means make 25 requests.
+
+    tileRequestDelay:
+    Number of milliseconds to wait between tile requests. It will slow your testing down, but we want to be nice to the tile servers.
+
+    serviceRequestDelay:
+    Number of milliseconds to wait in between service test requests. It will slow your testing down, but we want to be nice to the tile servers. For example, setting `serviceRequestDelay` to 100 and `iterations` to 25 means it will take 2.5 seconds to run the test 25 times.
+
+    analysis:
+    Run pre-configured tests against the spatial analysis service.
+
+    featureQuery:
+    Run pre-configured tests for feature service query. This test requires a feature service URL.
+
+    featureEdit:
+    Run pre-configured tests for feature service editing. This test requires a feature service URL that has been enabled for edit.
+
+    places:
+    Run pre-configured tests against the places service.
+
+    geocode:
+    Run pre-configured tests against the world geocoding service.
+
+    suggest:
+    Run pre-configured tests against the world geocoding service auto-suggest endpoint.
+
+    geoenrichment:
+    Run pre-configured tests against the world geoenrichment service.
+
+    routing:
+    Run pre-configured tests against the world routing service.
+
+    tiles:
+    Set to `true` to enable basemaps test.
+
+    useOceansImageryTiles:
+    Use the Oceans tile service for the basemaps test.
+
+    nonExistingTiles:
+    Include requests for tiles that do not exist (to see how that affects usage metering.)
 
     If you set `tiles` to `true`, configure which tile services you want to test and which LOD(s) you want to query.
 
