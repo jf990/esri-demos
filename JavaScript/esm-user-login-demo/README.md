@@ -2,7 +2,7 @@
 
 This project will demonstrate how to use [ArcGIS identity with OAuth 2.0]https://developers.arcgis.com/documentation/mapping-apis-and-services/security/oauth-2.0/) with an [ArcGIS API for JavaScript](https://developers.arcgis.com/javascript/latest/) app. ArcGIS identity provides different advantages when compared with API keys and application credentials authentication:
 
-1. A user login with OAuth 2.0 is considered the most secure of the [three ArcGIS authentication techniques](https://developers.arcgis.com/documentation/mapping-apis-and-services/security/#authentication-methods).
+1. A user login with OAuth 2.0 is considered the most secure of the [three ArcGIS authentication techniques](https://developers.arcgis.com/documentation/mapping-apis-and-services/security/types-of-authentication/).
 2. OAuth 2.0 is well seasoned and universally implemented by most PaaS and SaaS platforms.
 3. It requires the user to log in with an ArcGIS account (ArcGIS Platform, ArcGIS Online, or ArcGIS Enterprise), and that account has the required privileges to access the location services of the app.
 4. There are no secrets or personally identifiable information stored in the client app.
@@ -19,7 +19,7 @@ npm install
 ```
 
 3. Go to your [developer dashboard](https://developers.arcgis.com/applications) and get your app's **client ID**.
-    - If you do not have an ArcGIS Developer account you can [create on for free](https://developers.arcgis.com/sign-up).
+    - If you do not have an ArcGIS Developer account you can [create one for free](https://developers.arcgis.com/sign-up).
     - If you have an existing OAuth 2.0 app definition you can use it. Otherwise create a new application and save it. Copy the **client ID**. NOTE: you will also need to update the **Redirect URLs** section to add a redirect URL to your running app. We will go over that in a later step.
     - To learn more about application registration, [visit the tutorial](https://developers.arcgis.com/documentation/mapping-apis-and-services/security/tutorials/register-your-application/).
 
@@ -38,12 +38,12 @@ npm start
 Open a web browser to the location indicated on the console:
 
 ```txt
-vite vx.x.x dev server running at:
+VITE vx.x.x ready in xxx ms (NOTE: the following port number may be different on your console.)
 
   > Local: http://localhost:3000/
 ```
 
-At this point note the URL you app is running at and copy it. In this case it is `http://localhost:3000/` (it could be different on your computer.) This is your _redirect URI_ that you will need in order to complete the OAuth 2.0 login process.
+At this point note the URL your app is running at and copy it. In this case it is `http://localhost:3000/` (it could be different port number on your computer.) This is your _redirect URI_ that you will need in order to complete the OAuth 2.0 login process.
 
 6. OAuth 2.0 requires the authentication server to return to a registered redirect URL. Return to your [developer dashboard](https://developers.arcgis.com/applications) application definition and click **Edit application**.
     - In the **Redirect URLs** section, click **+ Add URI**.
@@ -57,6 +57,8 @@ At this point note the URL you app is running at and copy it. In this case it is
 Clicking the link redirects to an ArcGIS login screen running at arcgis.com. This screen may show different information depending on your logged in state.
 
 ![screenshot app sign in screen](sso-login.png)
+
+> NOTE: if you click the `Sign in` link and the server responds with `Invalid redirect_uri Error: 400`, then the redirect URI you configured is incorrect. Most likely the URI registered in your app does not match the one set in the app.
 
 After you log in and authorize the app, it should redirect back to your redirect URL set in a prior step. When it does this redirect the app will recognize the logged in user and render the map.
 

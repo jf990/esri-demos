@@ -1,6 +1,6 @@
 {
   "name": "esm-vite-demo",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Demo ArcGIS API for JavaScript with user login",
   "main": "index.js",
   "scripts": {
@@ -11,10 +11,10 @@
     "serve": "vite preview"
   },
   "devDependencies": {
-    "vite": "^2.8.6"
+    "vite": "^5.0.7"
   },
   "dependencies": {
-    "@arcgis/core": "^4.22.2"
+    "@arcgis/core": "^4.28.10"
   },
   "repository": {
     "type": "git",
