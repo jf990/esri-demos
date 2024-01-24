@@ -22,20 +22,21 @@ const testSwitches = {
     featureEdit: false,
     featureQuery: false,
     geocode: false,
+    geocodeClientTest: false,
     geoenrichment: false,
     places: false,
     routing: false,
     suggest: false,
-    tiles: false,
+    tiles: true,
     nonExistingTiles: false,
     useDev: true,
     useEnhancedServices: false,
     useOceansImageryTiles: false,
-    iterations: 20,
-    tileRequestDelay: 150,
+    iterations: 2000,
+    tileRequestDelay: 100,
     serviceRequestDelay: 350,
-    startLOD: 5,
-    endLOD: 6,
+    startLOD: 3,
+    endLOD: 9,
     tileService: ["vector"] // select any of "image", "vector", "hillshade", or "OSM"
 };
 
@@ -220,6 +221,9 @@ async function fetchVectorTile(tileServiceURL, lod, x, y) {
             requestCount += 1;
             process.stdout.write(`Fetched tile ${lod}/${y}/${x}\r`);
         }
+    })
+    .catch(function(exception) {
+      process.stderr.write(`Exception ${exception.toString()} for ${lod}/${y}/${x} on service ${tileServiceURL}${lod}/${y}/${x}\n`);
     });
 }
 
@@ -244,26 +248,32 @@ async function fetchVectorTile(tileServiceURL, lod, x, y) {
             requestCount += 1;
             process.stdout.write(`Fetched tile ${lod}/${y}/${x}\r`);
         }
+    })
+    .catch(function(exception) {
+      process.stderr.write(`Exception ${exception.toString()} for ${lod}/${y}/${x} on service ${tileServiceURL}${lod}/${y}/${x}\n`);
     });
 }
 
 /**
  * Fetch style for a given vector tile service.
- * @param {string} tileServiceURL The base URL of the tile service.
+ * @param {string} styleServiceURL The base URL of the style service.
  */
- async function fetchStyle(tileServiceURL) {
+ async function fetchStyle(styleServiceURL) {
     if (isCanceled) {
         return;
     }
-    fetch(tileServiceURL + `&token=${token}`, getFetchParameters())
+    fetch(styleServiceURL + `&token=${token}`, getFetchParameters())
     .then(function(response) {
         if (response.status != 200) {
             errorCount += 1;
-            process.stderr.write(`Status ${response.status} on service ${tileServiceURL}\n`);
+            process.stderr.write(`Status ${response.status} on service ${styleServiceURL}\n`);
         } else {
             requestCount += 1;
-            process.stdout.write(`Fetched style ${tileServiceURL}\n`);
+            process.stdout.write(`Fetched style ${styleServiceURL}\n`);
         }
+    })
+    .catch(function(exception) {
+      process.stderr.write(`Exception ${exception.toString()} on service ${styleServiceURL}\n`);
     });
 }
 
@@ -455,6 +465,93 @@ async function generateNonExistingTileUsage(service, interval, count) {
     }
 
     processGeocodeRequest();
+}
+
+/**
+ * One-off test to verify the geocode service returns the expected number of results
+ * and correctly handles spatial reference and extent.
+ */
+async function geocodeClientTest() {
+  const geocodeURL = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
+  const extent = '{"spatialReference":{"wkid":102100},"xmin":-13195373.795894774,"ymin":3984244.7919120155,"xmax":-13109365.106328506,"ymax":4043552.767686528}';
+  const businessNames = [
+    'alo_yoga',
+    'anthropologie',
+    'athleta',
+    'bluemercury',
+    'equinox fitness clubs',
+    'free_people',
+    'hm__hennes__mauritz',
+    'mac_cosmetics',
+    'madewell',
+    'peloton',
+    'pure_barre',
+    'sephora',
+    'urban_outfitters',
+    'barre3',
+    'lululemon',
+    'lush',
+    'on',
+    "barry's bootcamp",
+    'aritzia',
+    'everlane',
+    'sephora',
+    'corepower'
+  ];
+  const geocodeParameters = {
+    searchExtent: extent,
+    address: businessNames[0],
+    outFields: "address, type",
+    f: "pjson",
+    token: token
+  };
+  const url = new URL(geocodeURL);
+  let requests = 0;
+  let responses = 0;
+  let resultCount = 0;
+  errorCount = 0;
+
+  businessNames.forEach(async function(addressName) {
+    if (isCanceled) {
+      return;
+    }
+    geocodeParameters.address = addressName;
+    url.search = new URLSearchParams(geocodeParameters);
+    requests += 1;
+    const response = await fetch(url, getFetchParameters());
+    if (response.status != 200) {
+      errorCount += 1;
+      process.stderr.write(`Status ${response.status} on service ${geocodeURL}\n`);
+    } else {
+      responses += 1;
+      const result = await response.json();
+      if (result.error && result.error.code) {
+        process.stderr.write(`Status ${result.error.code} ${result.error.message} on service ${geocodeURL}\n`);
+      } else {
+        resultCount += result.candidates.length;
+        process.stdout.write(`Geocode findAddressCandidates for ${addressName} returned ${result.candidates.length}\n`);
+      }
+    }
+    if (requests >= businessNames.length) {
+      process.stdout.write(`Geocode findAddressCandidates complete with ${resultCount}\n`);
+    }
+
+    // .then(async function(response) {
+    //     if (response.status != 200) {
+    //       errorCount += 1;
+    //       process.stderr.write(`Status ${response.status} on service ${geocodeURL}\n`);
+    //     } else {
+    //       responses += 1;
+    //       const result = await response.json();
+    //       if (result.error && result.error.code) {
+    //         process.stderr.write(`Status ${result.error.code} ${result.error.message} on service ${geocodeURL}\n`);
+    //       } else {
+    //         resultCount += result.candidates.length;
+    //         process.stdout.write(`Geocode findAddressCandidates for ${addressName} returned ${result.candidates.length}\n`);
+    //       }
+    //     }
+    // });    
+  });
 }
 
 /**
@@ -850,6 +947,9 @@ async function runUsageTest() {
     await getAuthentication();
     if (token != null || authentication != null) {
         reportedServiceURL = false;
+        if (testSwitches.geocodeClientTest) {
+            geocodeClientTest();
+        }
         if (testSwitches.tiles) {
             generateTileUsage(testSwitches.tileService, testSwitches.startLOD, testSwitches.endLOD);
             reportedServiceURL = false;
