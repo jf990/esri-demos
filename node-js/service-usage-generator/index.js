@@ -4,40 +4,49 @@
  * properly. Other than just generating random requests, this app has no other useful purpose.
  * 
  * Configuration required:
- * Create/edit .env with your authentication:
+ * Create/edit .env with your authentication (see .env.sample):
  *   API_KEY is set to an api key you own that has the required scopes for the service tests you want to run.
  *     Make sure the key matches the stage you are testing on.
  *   CLIENT_ID/CLIENT_SECRET are set to an oauth app you own. This is used only if API_KEY is not set.
+ *   ARCGIS_USER_NAME/ARCGIS_USER_PASSWORD are used to generate a user OAuth token if needed.
  *   FEATURE_SERVICE_URL if you want to run the feature service test then set this to a feature service you own
  *     and is scoped to the authentication you set. It should have the edit privilege turned on.
+ *   ANALYSIS_SERVICE_URL to your analysis service if you request the spatial analysis test.
  */
 import fetch from "node-fetch";
 import { ApiKeyManager, ArcGISIdentityManager, Job,  JOB_STATUSES  } from "@esri/arcgis-rest-request";
+import { geocode, suggest } from "@esri/arcgis-rest-geocoding";
+import { solveRoute, closestFacility, serviceArea, originDestinationMatrix } from '@esri/arcgis-rest-routing';
 import dotenv from "dotenv";
 dotenv.config();
 
 // Update these variables to the tests you want to conduct.
 const testSwitches = {
+    // Services
     analysis: false,
     featureEdit: false,
     featureQuery: false,
     geocode: false,
+    suggest: true,
+    geocodeForStorage: false,
     geocodeClientTest: false,
     geoenrichment: false,
+    geoenrichmentReport: false,
     places: false,
     routing: false,
-    suggest: false,
-    tiles: true,
-    nonExistingTiles: false,
-    useDev: true,
-    useEnhancedServices: false,
-    useOceansImageryTiles: false,
-    iterations: 2000,
-    tileRequestDelay: 100,
-    serviceRequestDelay: 350,
+    tiles: false,
+    // Parameters to tile requests
+    tileService: ["vector"], // select any of "image", "vector", "hillshade", or "OSM"
     startLOD: 3,
-    endLOD: 9,
-    tileService: ["vector"] // select any of "image", "vector", "hillshade", or "OSM"
+    endLOD: 5,
+    useOceansImageryTiles: false,
+    nonExistingTiles: false,
+    tileRequestDelay: 100,
+    // Test flags
+    useDev: false,
+    useEnhancedServices: false,
+    iterations: 20,
+    serviceRequestDelay: 350
 };
 
 const tileServices = {
@@ -93,7 +102,7 @@ const fetchParameters = {
         "sec-fetch-mode": "cors",
         "sec-fetch-site": "same-site"
     },
-    "referrer": "https://master.sites.afd.arcgis.com/",
+    "referrer": "https://main.sites.afd.arcgis.com/",
     "referrerPolicy": "strict-origin-when-cross-origin",
     "body": null,
     "mode": "cors"
@@ -105,18 +114,30 @@ const fetchParameters = {
  * @param {object} additionalParameters Additional parameters to add to the GET request.
  * @returns {object} Parameters to use in a GET request.
  */
-function getFetchParameters(additionalParameters) {    
+function getFetchParameters(additionalParameters) {
     return Object.assign(fetchParameters, {method: "GET"}, additionalParameters || {});
 }
 
 /**
  * Build a POST request parameters object to send to the server by combining the
  * required parameters with any request-specific parameters.
- * @param {object} additionalParameters Additional parameters to add to the POST request.
+ * @param {object} formParameters Parameters to send as the POST request body URL form encoded.
  * @returns {object} Parameters to use in a POST request.
  */
-function postFetchParameters(additionalParameters) {    
-    return Object.assign(fetchParameters, {method: "POST"}, additionalParameters || {});
+function postFetchParameters(formParameters) {
+    const formBody = [];
+    for (let property in formParameters) {
+        let value = formParameters[property];
+        if (typeof value == "object") {
+            formBody.push(encodeURIComponent(property) + "=" + JSON.stringify(value));
+        } else {
+            formBody.push(encodeURIComponent(property) + "=" + encodeURIComponent(formParameters[property]));
+        }
+    }
+    const postParameters = Object.assign(fetchParameters, {method: "POST"});
+    postParameters.headers["Content-Type"] = "application/x-www-form-urlencoded;charset=UTF-8";
+    postParameters.body = formBody.join("&");
+    return postParameters;
 }
 
 /**
@@ -125,10 +146,14 @@ function postFetchParameters(additionalParameters) {
  */
 async function signIn() {
     if (process.env.ARCGIS_USER_NAME && process.env.ARCGIS_USER_PASSWORD) {
-        return ArcGISIdentityManager.signIn({
-            username: process.env.ARCGIS_USER_NAME,
-            password: process.env.ARCGIS_USER_PASSWORD
-        })
+        const portalOptions = {
+          username: process.env.ARCGIS_USER_NAME,
+          password: process.env.ARCGIS_USER_PASSWORD
+        }
+        if (testSwitches.useDev) {
+          portalOptions.portal = "https://devext.arcgis.com/sharing/rest"
+        }
+        return ArcGISIdentityManager.signIn(portalOptions)
         .then(function(identityManager) {
             return identityManager;
         })
@@ -158,7 +183,7 @@ async function getAuthentication() {
     if (process.env.ARCGIS_USER_NAME && process.env.ARCGIS_USER_PASSWORD) {
         try {
             authentication = await signIn();
-            console.log(`Authentication with user credentials.`);
+            console.log(`Authenticated with user credentials.`);
         } catch (authenticationError) {
             console.log(`Authentication with user credentials FAILED. ` + authenticationError.toString());
         }
@@ -314,7 +339,7 @@ async function fetchVectorTiles(tileServiceURL, lod) {
 }
 
 /**
- * Fetch a tile we know does not exist.
+ * Fetch a vector tile we know does not exist.
  * @param {string} tileServiceURL Indicate the URL of the tile service you wish to query.
  */
 async function fetchNonExistingVectorTiles(tileServiceURL) {
@@ -326,7 +351,7 @@ async function fetchNonExistingVectorTiles(tileServiceURL) {
 }
 
 /**
- * Fetch a tile we know does not exist.
+ * Fetch an image tile we know does not exist.
  * @param {string} tileServiceURL Indicate the URL of the tile service you wish to query.
  */
 async function fetchNonExistingImageTiles(tileServiceURL) {
@@ -414,34 +439,30 @@ async function generateNonExistingTileUsage(service, interval, count) {
     const geocodeService = testSwitches.useDev ? geocodingServiceHosts.dev : geocodingServiceHosts.prod;
     const geocodeURL = geocodeService + "/arcgis/rest/services/World/GeocodeServer/findAddressCandidates";
     const geocodeParameters = {
-        f: "json",
-        singleLine: "Grocery Store redlands CA",
+        singleLine: "Grocery Store Dumont NJ",
         outFields: "phone",
-        forStorage: false,
-        token: token
+        forStorage: testSwitches.geocodeForStorage,
+        endpoint: geocodeURL,
+        authentication: ApiKeyManager.fromKey(token)
     };
 
-    return new Promise(function (resolve, reject) {
-        if (isCanceled) {
-            resolve(null);
-        }
-        const url = new URL(geocodeURL);
-        url.search = new URLSearchParams(geocodeParameters);
-        if ( ! reportedServiceURL) {
-            process.stdout.write(`Geocode request to ${url}\n`);
-            reportedServiceURL = true;
-        }
-        fetch(url, getFetchParameters())
-        .then(async function(response) {
-            if (response.status != 200) {
-                errorCount += 1;
-                process.stderr.write(`Status ${response.status} on service ${geocodeURL}\n`);
-                resolve(null);
-            } else {
-                const result = await response.json();
-                resolve(result);
-            }
-        });    
+    return new Promise(function (resolve) {
+      if (isCanceled) {
+        resolve(null);
+      }
+      if ( ! reportedServiceURL) {
+        process.stdout.write(`Geocode request to ${geocodeURL}\n`);
+        reportedServiceURL = true;
+      }
+      geocode(geocodeParameters)
+      .then(function(response) {
+        resolve(response);
+      })
+      .catch(function(exception) {
+        errorCount += 1;
+        process.stderr.write(`Error ${exception.toString()} on service ${geocodeURL}\n`);
+        resolve(null);
+      });
     });
 }
 
@@ -563,16 +584,8 @@ async function geocodeClientTest() {
     const geocodeService = testSwitches.useDev ? geocodingServiceHosts.dev : geocodingServiceHosts.prod;
     const geocodeURL = geocodeService + "/arcgis/rest/services/World/GeocodeServer/suggest";
     const geocodeParameters = {
-        f: "json",
-        text: text,
-        category: "Address,POI",
-        location: "{\"x\":-94.583874,\"y\":39.104531,\"spatialReference\": {\"wkid\": 3857}}",
-        countryCode: "US",
-        preferredLabelValues: "localCity",
-        maxSuggestions: 3,
-        outFields: "phone",
-        forStorage: false,
-        token: token
+        endpoint: geocodeURL,
+        authentication: ApiKeyManager.fromKey(token)
     };
 
     return new Promise(function (resolve, reject) {
@@ -584,18 +597,15 @@ async function geocodeClientTest() {
             process.stdout.write(`Geocode suggest request to ${url}\n`);
             reportedServiceURL = true;
         }
-        url.search = new URLSearchParams(geocodeParameters);
-        fetch(url, getFetchParameters())
-        .then(async function(response) {
-            if (response.status != 200) {
-                errorCount += 1;
-                process.stderr.write(`Status ${response.status} on service ${geocodeURL}\n`);
-                resolve(null);
-            } else {
-                const result = await response.json();
-                resolve(result);
-            }
-        });    
+        suggest(text, geocodeParameters)
+        .then(function(result) {
+          resolve(result);
+        })
+        .catch(function(exception) {
+          errorCount += 1;
+          process.stderr.write(`Error ${exception.toString()} on service ${geocodeURL}\n`);
+          resolve(null);
+        });
     });
 }
 
@@ -627,7 +637,6 @@ async function geocodeClientTest() {
 
     processGeocodeSuggestRequest();
 }
-
 
 /**
  * Send a single places request.
@@ -673,19 +682,60 @@ function placesRequest() {
 }
 
 /**
+ * Send a single place details request.
+ * @param {string} placeId The id of the place to look up.
+ * @returns {Promise} Requests take a while, resolves with the server response.
+ */
+function placeDetailsRequest(placeId) {
+  const placesService = testSwitches.useDev ? placesServiceHosts.dev : placesServiceHosts.prod;
+  const placesURL = placesService + "/arcgis/rest/services/places-service/v1/places/";
+  const placesParameters = {
+      f: "json",
+      requestedFields: ["hours"],
+      token: token
+  };
+
+  return new Promise(function (resolve, reject) {
+      if (isCanceled) {
+          resolve(null);
+      }
+      const url = new URL(placesURL + placeId);
+      url.search = new URLSearchParams(placesParameters);
+      if ( ! reportedServiceURL) {
+          process.stdout.write(`Place details request to ${url}\n`);
+          reportedServiceURL = true;
+      }
+      fetch(url, getFetchParameters())
+      .then(async function(response) {
+          if (response.status != 200) {
+              errorCount += 1;
+              process.stderr.write(`Status ${response.status} on service ${placesURL}\n`);
+              resolve(null);
+          } else {
+              const result = await response.json();
+              resolve(result);
+          }
+      });    
+  });
+}
+
+/**
  * Generate places usage.
  * @param {integer} interval Number of milliseconds between requests to be nice to the servers.
  * @param {integer} count Total number of requests to make.
  */
 async function placesUsageGenerator(interval, count) {
     let hitsRemaining = count;
+    const placeId = "02388b81d501252b6097afa57ebdc4d4";
 
     async function processPlacesRequest() {
         const result = await placesRequest();
         const placesResponse = JSON.stringify(result);
+        const details = await placeDetailsRequest(placeId);
+        const detailsInfo = JSON.stringify(details);
         requestCount += 1;
         hitsRemaining -= 1;
-        process.stdout.write(`Fetched ${(count - hitsRemaining)} ${placesResponse}\n\n\n`);
+        process.stdout.write(`Fetched ${(count - hitsRemaining)} ${placesResponse}\n\n${detailsInfo}\n\n`);
         if (hitsRemaining > 0) {
             setTimeout(processPlacesRequest, interval);
         }
@@ -699,7 +749,7 @@ async function placesUsageGenerator(interval, count) {
  * @param {integer} interval Number of milliseconds between requests to be nice to the servers.
  * @param {integer} count Total number of requests to make.
  */
- async function geoEnrichmentUsageGenerator(interval, count) {
+async function geoEnrichmentUsageGenerator(interval, count) {
     let hitsRemaining = count;
 
     async function processGeoEnrichmentRequest() {
@@ -721,18 +771,18 @@ async function placesUsageGenerator(interval, count) {
  * @returns {Promise} Requests take a while, resolves with the server response.
  */
 async function geoEnrichmentRequest() {
-    // Create report:   let url = "https://geoenrich.arcgis.com/arcgis/rest/services/World/geoenrichmentserver/Geoenrichment/createReport?report=acs_housing&format=pdf&f=pjson&studyAreas=[{"address":{"text":"380 New York St. Redlands, CA 92373"}},{"address":{"text":"3722 Crenshaw Blvd, Los Angeles, CA 90016"}},{"address":{"text":"2103 N Hall St, Dallas, TX 75204"}},{"address":{"text":"2807 N. Campbell Road, Tucson, AZ 85719"}},{"address":{"text":"30 W Erie St, Chicago, IL 60654"}}]&token=""
-
     const geoEnrichService = testSwitches.useDev ? "https://geoenrichdev.arcgis.com" : "https://geoenrich.arcgis.com";
-    const geoEnrichURL = geoEnrichService + "/arcgis/rest/services/World/geoenrichmentserver/GeoEnrichment/enrich";
+    const servicePath = "/arcgis/rest/services/World/geoenrichmentserver/GeoEnrichment/";
+    const geoEnrichURL = geoEnrichService + servicePath + "enrich";
     const geoEnrichParameters = {
         studyAreas: '[{"geometry":{"x":-117.1956,"y":34.0572}}]',
         analysisVariables: '["KeyGlobalFacts.TOTPOP"]',
+        // forStorage: false, // adding forStorage=false sends the usage to 172135, otherwise it goes to 172134
         f: "json",
         token: token
     };
 
-    return new Promise(function (resolve, reject) {
+    return new Promise(function (resolve) {
         if (isCanceled) {
             resolve(null);
         }
@@ -750,10 +800,277 @@ async function geoEnrichmentRequest() {
                 resolve(null);
             } else {
                 const result = await response.json();
+                process.stdout.write(`GeoEnrich response ${response.status}\n`);
                 resolve(result);
             }
-        });    
+        })
+        .catch(function(exception) {
+            process.stderr.write(`Error ${exception.toString()} on service ${geoEnrichURL}\n`);
+            resolve(null);
+        })
     });
+}
+
+/**
+ * Generate a GeoEnrichment report. We only allow one of these at a time.
+ */
+async function geoEnrichmentReportUsageGenerator() {
+    const result = await geoEnrichmentReport();
+    const geoEnrichResult = JSON.stringify(result);
+    requestCount += 1;
+    process.stdout.write(`Fetched report ${geoEnrichResult}\n\n\n`);
+}
+
+/**
+ * Send a single GeoEnrichment report request.
+ * @returns {Promise} Requests take a while, resolves with the server response.
+ */
+async function geoEnrichmentReport() {
+    const geoEnrichService = testSwitches.useDev ? "https://geoenrichdev.arcgis.com" : "https://geoenrich.arcgis.com";
+    const servicePath = "/arcgis/rest/services/World/geoenrichmentserver/GeoEnrichment/";
+    const createReportURL = geoEnrichService + servicePath + "createReport";
+    const reportParameters = {
+      studyAreas: '[{"address":{"text":"10685 NW Dumar Ln. Portland, OR 97229"}},{"address":{"text":"380 New York St. Redlands, CA 92373"}},{"address":{"text":"3722 Crenshaw Blvd, Los Angeles, CA 90016"}}]',
+      studyAreasOptions: '{"areaType":"RingBuffer","bufferUnits":"esriMiles","bufferRadii":[3,5,10]}',
+      report: 'dandi',
+      reportFields: '{"title": "Location Platform Report","subtitle": "Produced by Location Platform usage generator"}',
+      useData: '{"sourceCountry":"US"}',
+      forStorage: false,
+      format: "xml", // xml|pdf
+      f: "bin",
+      token: token
+    };
+
+    return new Promise(function (resolve) {
+      if (isCanceled) {
+          resolve(null);
+      }
+      const url = new URL(createReportURL);
+      url.search = new URLSearchParams(reportParameters);
+      if ( ! reportedServiceURL) {
+          process.stdout.write(`GeoEnrich request to ${url}\n`);
+          reportedServiceURL = true;
+      }
+      fetch(url, getFetchParameters())
+      .then(async function(response) {
+          if (response.status != 200) {
+              errorCount += 1;
+              process.stderr.write(`Status ${response.status} on service ${createReportURL}\n`);
+              resolve(null);
+          } else {
+              // const result = await response.json(); // response may not be JSON based on the f parameter
+              resolve(result);
+          }
+      })
+      .catch(function(exception) {
+          process.stderr.write(`Error ${exception.toString()} on service ${geoEnrichURL}\n`);
+          resolve(null);
+      })
+    });
+}
+
+/**
+ * Send a single Routing request.
+ * @returns {Promise} Requests take a while, resolves with the server response.
+ */
+async function routingRequest() {
+  const routingService = testSwitches.useDev ? "https://routedev.arcgis.com" : "https://route-api.arcgis.com";
+  const servicePath = "/arcgis/rest/services/World/Route/NAServer/Route_World/";
+  const routingURL = routingService + servicePath + "solve";
+  const routingParameters = {
+      stops: "-122.68782,45.51238;-122.690176,45.522054;-122.614995,45.526201",
+      startTime: "now",
+      returnDirections: true,
+      findBestSequence: true,
+      f: "json",
+      token: token
+  };
+
+  return new Promise(function (resolve) {
+      if (isCanceled) {
+          resolve(null);
+      }
+      const url = new URL(routingURL);
+      url.search = new URLSearchParams(routingParameters);
+
+      if ( ! reportedServiceURL) {
+          process.stdout.write(`Routing request to ${url}\n`);
+          reportedServiceURL = true;
+      }
+      fetch(url, getFetchParameters())
+      .then(async function(response) {
+          if (response.status != 200) {
+              errorCount += 1;
+              process.stderr.write(`Status ${response.status} on service ${routingURL}\n`);
+              resolve(null);
+          } else {
+              const result = await response.json();
+              process.stdout.write(`Routing response ${response.status}\n`);
+              resolve(result);
+          }
+      })
+      .catch(function(exception) {
+          process.stderr.write(`Error ${exception.toString()} on service ${routingURL}\n`);
+          resolve(null);
+      })
+  });
+}
+
+/**
+ * Send a single Fleet Routing request.
+ * @returns {Promise} Requests take a while, resolves with the server response.
+ */
+async function fleetRoutingRequest() {
+  const logisticsService = testSwitches.useDev ? "https://logisticsdev.arcgis.com" : "https://logistics.arcgis.com";
+  const fleetPath = "/arcgis/rest/services/World/VehicleRoutingProblemSync/GPServer/EditVehicleRoutingProblem/";
+  const fleetURL = logisticsService + fleetPath + "execute";
+  const fleetOrders = {
+    "type": "features",
+    "features": [{
+        "attributes": {
+            "Name": "Father's Office",
+            "ServiceTime": 10
+        },
+        "geometry": {
+            "x": -118.498406,
+            "y": 34.029445
+        }
+      },
+      {
+        "attributes": {
+            "Name": "R+D Kitchen",
+            "ServiceTime": 10
+        },
+        "geometry": {
+            "x": -118.495788,
+            "y": 34.032339
+        }
+      },
+      {
+        "attributes": {
+            "Name": "Pono Burger",
+            "ServiceTime": 10
+        },
+          "geometry": {
+          "x": -118.489469,
+          "y": 34.019000
+        }
+      },
+      {
+        "attributes": {
+            "Name": "Il Ristorante di Giorgio Baldi",
+            "ServiceTime": 10
+        },
+          "geometry": {
+          "x": -118.518787,
+          "y": 34.028508
+        }
+      },
+      {
+        "attributes": {
+            "Name": "Milo + Olive",
+            "ServiceTime": 10
+        },
+          "geometry": {
+          "x": -118.476026,
+          "y": 34.037572
+        }
+      },
+      {
+        "attributes": {
+            "Name": "Dialogue",
+            "ServiceTime": 10
+        },
+          "geometry": {
+          "x": -118.495814,
+          "y": 34.017042
+        }
+      }]
+  };
+  const fleetDepots = {
+    "type":"features",
+    "features" : [{
+      "attributes" : {
+          "Name" : "Bay Cities Kitchens and Appliances"
+      },
+      "geometry" : {
+          "x" : -118.469630,
+          "y" : 34.037555
+      }
+    }]
+  };
+  const fleetRoutes = {
+    "features": [{
+      "attributes": {
+          "Name": "Route 1",
+          "Description": "vehicle 1",
+          "StartDepotName": "Bay Cities Kitchens and Appliances",
+          "EndDepotName": "Bay Cities Kitchens and Appliances",
+          "Capacities": "4",
+          "MaxOrderCount": 3,
+          "MaxTotalTime": 60,
+        }
+      },
+      {
+    "attributes": {
+          "Name": "Route 2",
+          "Description": "vehicle 2",
+          "StartDepotName": "Bay Cities Kitchens and Appliances",
+          "EndDepotName": "Bay Cities Kitchens and Appliances",
+          "Capacities": "4",
+          "MaxOrderCount": 3,
+          "MaxTotalTime": 60,
+        }
+      }
+  ]
+  };
+  const fleetParameters = {
+      populate_directions: true,
+      orders: JSON.stringify(fleetOrders),
+      depots: JSON.stringify(fleetDepots),
+      routes: JSON.stringify(fleetRoutes),
+      f: "json",
+      token: token
+  };
+
+  return new Promise(function (resolve) {
+      if (isCanceled) {
+          resolve(null);
+      }
+      const url = new URL(fleetURL);
+      url.search = new URLSearchParams(fleetParameters);
+
+      if ( ! reportedServiceURL) {
+          process.stdout.write(`Fleet Routing request to ${url}\n`);
+          reportedServiceURL = true;
+      }
+      fetch(url, getFetchParameters())
+      .then(async function(response) {
+          if (response.status != 200) {
+              errorCount += 1;
+              process.stderr.write(`Status ${response.status} on service ${fleetURL}\n`);
+              resolve(null);
+          } else {
+              const result = await response.json();
+              process.stdout.write(`Fleet Routing response ${response.status}\n`);
+              resolve(result);
+          }
+      })
+      .catch(function(exception) {
+          process.stderr.write(`Error ${exception.toString()} on service ${fleetURL}\n`);
+          resolve(null);
+      })
+  });
+}
+
+async function routingJobUsageGenerator(interval, count) {
+  // New function to test asyn Job submit for routing
+// https://logisticsdev.arcgis.com/arcgis/rest/services/World/Route/GPServer/FindRoutes/submitJob
+// f:json
+// token:{{API Key}}
+// stops:-122.68782,45.51238;-122.690176,45.522054;-122.614995,45.526201
+// startTime:now
+// returnDirections:true
 }
 
 /**
@@ -762,7 +1079,42 @@ async function geoEnrichmentRequest() {
  * @param {integer} count Total number of requests to make.
  */
 async function routingUsageGenerator(interval, count) {
+  let hitsRemaining = count;
 
+  async function processRoutingRequest() {
+      const result = await routingRequest();
+      const routingResult = JSON.stringify(result);
+      requestCount += 1;
+      hitsRemaining -= 1;
+      process.stdout.write(`Fetched ${(count - hitsRemaining)} ${routingResult}\n\n\n`);
+      if (hitsRemaining > 0) {
+          setTimeout(processRoutingRequest, interval);
+      }
+  }
+
+  processRoutingRequest();
+}
+
+/**
+ * Generate fleet routing usage.
+ * @param {integer} interval Number of milliseconds between requests to be nice to the servers.
+ * @param {integer} count Total number of requests to make.
+ */
+async function fleetRoutingUsageGenerator(interval, count) {
+  let hitsRemaining = count;
+
+  async function processFleetRoutingRequest() {
+      const result = await fleetRoutingRequest();
+      const routingResult = JSON.stringify(result);
+      requestCount += 1;
+      hitsRemaining -= 1;
+      process.stdout.write(`Fetched ${(count - hitsRemaining)} ${routingResult}\n\n\n`);
+      if (hitsRemaining > 0) {
+          setTimeout(processFleetRoutingRequest, interval);
+      }
+  }
+
+  processFleetRoutingRequest();
 }
 
 /**
@@ -822,110 +1174,153 @@ async function featureQueryUsageGenerator(interval, count) {
     processFeatureQueryRequest();
 }
 
+async function spatialAnalysisTestUsage(interval, count) {
+  const mySpatialAnalysisServiceURL = process.env.ANALYSIS_SERVICE_URL;
+  const myFeatureServiceURL = process.env.FEATURE_SERVICE_URL;
+  const statesLayer = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Boundaries_2022/FeatureServer"
+  const accessToken = ApiKeyManager.fromKey(token); // testing SA with an API key, use authentication to test with OAuth token
+  const operationURL = `${mySpatialAnalysisServiceURL}SummarizeWithin/submitJob`;
+  const parameters = {
+    summaryLayer: '{"url":"' + myFeatureServiceURL + '","name":"Breweries"}',
+    sumWithinLayer: '{"url":"' + statesLayer + '","name":"State boundaries"}',
+    sumShape: true,
+    shapeUnits: "Miles",
+    groupByField: "STATE",
+    minorityMajority: false,
+    returnProcessInfo: true,
+    outputName: '{"serviceProperties":{"name":"Summarize within results"}}',
+    f: "json"
+  };
+
+  process.stdout.write(`generating analysis usage on ${operationURL} with REST JS\n`);
+
+  // Using ArcGIS REST JS to monitor job status
+  Job.submitJob({
+    authentication: accessToken, // authentication,
+    url: operationURL,
+    params: parameters
+  }).then(async function(job) {
+    // listen to the status event to get an update every time the job status is checked.
+    console.log("Job submitted");
+    job.on(JOB_STATUSES.Status, function(jobInfo) {
+      console.log("Job status update " + JSON.stringify(jobInfo));
+    });
+    job.on(JOB_STATUSES.Success, function(jobInfo) {
+      console.log("Job success " + JSON.stringify(jobInfo));
+    });
+    job.on(JOB_STATUSES.Failed, function(jobInfo) {
+      console.log("Job failed " + JSON.stringify(jobInfo));
+    });
+  
+    // get all the results, this will start monitoring and trigger events
+    return job.getAllResults();
+  }).then(function(results) {
+    console.log("Job RESULTS:", JSON.stringify(results));
+  })
+  .catch(function(exception) {
+    console.log("Job Error " + exception.toString());
+  });
+}
+
+async function spatialAnalysisTestUsageWithFetch(interval, count) {
+  const mySpatialAnalysisServiceURL = process.env.ANALYSIS_SERVICE_URL;
+  const myFeatureServiceURL = process.env.FEATURE_SERVICE_URL;
+  const statesLayer = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Boundaries_2022/FeatureServer"
+  const myHeaders = new Headers();
+  const accessToken = token; // authentication.token; // token;
+  myHeaders.append("Content-Type", "application/x-www-form-urlencoded");
+
+  const urlencoded = new URLSearchParams();
+  urlencoded.append("summaryLayer", "{\"url\":\"" + myFeatureServiceURL + "\",\"name\":\"Breweries\"}");
+  urlencoded.append("sumWithinLayer", "{\"url\":\"" + statesLayer + "\",\"name\":\"State boundaries\"}");
+  urlencoded.append("sumShape", "true");
+  urlencoded.append("shapeUnits", "Miles");
+  urlencoded.append("groupByField", "ROUTE");
+  urlencoded.append("minorityMajority", "false");
+  urlencoded.append("outputName", "{\"serviceProperties\":{\"name\":\"Summarize within results\"}}");
+  urlencoded.append("f", "json");
+  urlencoded.append("token", accessToken);
+
+  const requestOptions = {
+    method: "POST",
+    headers: myHeaders,
+    body: urlencoded,
+    redirect: "follow"
+  };
+  const operationURL = `${mySpatialAnalysisServiceURL}SummarizeWithin/submitJob`;
+  process.stdout.write(`generating analysis usage on ${operationURL} with fetch:\n`);
+  process.stdout.write(`using token ${accessToken}\n`);
+  
+  fetch(operationURL, requestOptions)
+    .then(function(response) {
+      response.text()
+      .then(function(result) {
+        // {"jobId":"jd76560c0aedc4ada9f46284452cbc532","jobStatus":"esriJobSubmitted","results":{},"inputs":{},"messages":[]}
+        const serverResponse = JSON.parse(result);
+        if (serverResponse.error) {
+          console.error(`Error ${serverResponse.error.code}: ${serverResponse.error.message}`);
+        } else {
+          const jobId = serverResponse.jobId;
+          console.log(`Server job ${serverResponse.jobId} status ${serverResponse.jobStatus}`);
+
+          // poll the job until status complete
+        }
+      });
+    })
+    .catch(function(error) {
+      console.error("Exception from SA service: " + error.toString());
+    });
+}
+
 async function spatialAnalysisUsageGenerator(interval, count) {
     const mySpatialAnalysisServiceURL = process.env.ANALYSIS_SERVICE_URL;
+    const myFeatureServiceURL = process.env.FEATURE_SERVICE_URL;
     const operation = "FindHotSpots";
-    const operationURL = mySpatialAnalysisServiceURL + "/" + operation;
+    const operationURL = mySpatialAnalysisServiceURL + operation;
+    const accessToken = ApiKeyManager.fromKey(token); // testing SA with an API key
 
+    // Spatial analysis requires a logged in user access token
+    // if ( ! authentication) {
+    //   process.stdout.write(`Must have signIn to process spatial analysis\n`);
+    //   process.exit(7);
+    // }
+    // API key must be scoped to Spatial Analysis PLUS "create, update and delete content privilege"
     process.stdout.write(`generating analysis usage on ${operationURL}\n`);
 
-    if (authentication == null && token != null) {
-        authentication = ApiKeyManager.fromKey(token);
-    }
-    // I'm sorting out what the parameters should be
     const parameters = {
-        analysisLayer: '{"url":"https://services8.arcgis.com/LLNIdHmmdjO2qQ5q/arcgis/rest/services/ufo_sightings/FeatureServer/0","name":"UFO Sightings"}',
-        returnProcessInfo: true,
-        shapeType: "fishnet",
-        context: '{"extent":{"xmin":-18328487.18419819,"ymin":2384143.907125093,"xmax":-5149520.515384748,"ymax":10543949.55062206,"spatialReference":{"wkid":102100,"latestWkid":3857}}}',
-        // f: "json",
-        // token: authentication.token
+      analysisLayer: '{"url":"' + myFeatureServiceURL + '"}',
+      returnProcessInfo: true,
+      shapeType: "fishnet",
+      context: '{}',
+      f: "json"
     };
     requestCount += 1;
-
-    /* Using REST API
-    const submitJob = operationURL + "/submitJob";
-    const url = new URL(submitJob);
-    url.search = new URLSearchParams(parameters);
-    fetch(url, getFetchParameters())
-    .then(async function(response) {
-        if (response.status != 200) {
-            errorCount += 1;
-            console.log(`Status ${response.status} on service ${operationURL}\n`);
-            resolve(null);
-        } else {
-            console.log(`Status ${response.status} on service ${operationURL}\n`);
-            const result = await response.json();
-            console.log(JSON.stringify(result));
-            // {"jobId":"j331605330636454195de663b8580c32b","jobStatus":"esriJobSubmitted","results":{},"inputs":{},"messages":[]}
-        }
-    });
-
-    analysisLayer: {"url":"https://services8.arcgis.com/LLNIdHmmdjO2qQ5q/arcgis/rest/services/ufo_sightings/FeatureServer/0","name":"UFO Sightings"}
-    shapeType: fishnet
-    returnProcessInfo: true
-    context: {"extent":{"xmin":-18328487.18419819,"ymin":2384143.907125093,"xmax":-5149520.515384748,"ymax":10543949.55062206,"spatialReference":{"wkid":102100,"latestWkid":3857}}}
-    */
-
-    // Using ArcGIS REST JS
+    // Using ArcGIS REST JS to monitor job status
     Job.submitJob({
-        authentication: authentication,
-        url: operationURL,
-        params: parameters
-      }).then(async function(job) {
-        // listen to the status event to get an update every time the job status is checked.
-        console.log("Job submitted");
-        job.on(JOB_STATUSES.Status, function(jobInfo) {
-            console.log("Job status update " + JSON.stringify(jobInfo));
-        });
-        job.on(JOB_STATUSES.Success, function(jobInfo) {
-            console.log("Job success " + JSON.stringify(jobInfo));
-        });
-        job.on(JOB_STATUSES.Failed, function(jobInfo) {
-            console.log("Job failed " + JSON.stringify(jobInfo));
-        });
-  
-        // get all the results, this will start monitoring and trigger events
-        return job.getAllResults();
-      }).then(function(results) {
+      authentication: accessToken, // authentication,
+      url: operationURL,
+      params: parameters
+    }).then(async function(job) {
+      // listen to the status event to get an update every time the job status is checked.
+      console.log("Job submitted");
+      job.on(JOB_STATUSES.Status, function(jobInfo) {
+          console.log("Job status update " + JSON.stringify(jobInfo));
+      });
+      job.on(JOB_STATUSES.Success, function(jobInfo) {
+          console.log("Job success " + JSON.stringify(jobInfo));
+      });
+      job.on(JOB_STATUSES.Failed, function(jobInfo) {
+          console.log("Job failed " + JSON.stringify(jobInfo));
+      });
+
+      // get all the results, this will start monitoring and trigger events
+      return job.getAllResults();
+    }).then(function(results) {
           console.log("Job RESULTS:", JSON.stringify(results));
-      })
-      .catch(function(exception) {
+    })
+    .catch(function(exception) {
           console.log("Job Error " + exception.toString());
-      })
-
-    /*
-1. POST job
-
-https://analysis8.arcgis.com/arcgis/rest/services/tasks/GPServer/FindHotSpots/submitJob
-Content-Type: application/x-www-form-urlencoded
-
-&f=json
-&token=<ACCESS_TOKEN>
-&analysisLayer={"url":"https://services8.arcgis.com/PxLlS7hS3gd7MX6c/arcgis/rest/services/ufoscrubbedgeocodedtimestandardized/FeatureServer/0","filter":"DURATION > 0","serviceToken":"","name":"Observation"}
-&analysisField=DURATION
-&returnProcessInfo=true
-&context={"extent":{"xmin":-13701588.357587751,"ymin":5636873.660541155,"xmax":-13554599.952195555,"ymax":5730585.457218655,"spatialReference":{"wkid":102100,"latestWkid":3857}}}
-
-2. Job status
-
-POST <ANALYSIS_SERVICE>/arcgis/rest/services/tasks/GPServer/FindHotSpots/jobs/<JOB_ID> HTTP/1.1
-Content-Type: application/x-www-form-urlencoded
-
-&f=json
-&token=<ACCESS_TOKEN>
-
-3. Get results
-
-POST <ANALYSIS_SERVICE>/arcgis/rest/services/tasks/GPServer/FindHotSpots/jobs/<JOB_ID>/results/hotSpotsResultLayer HTTP/1.1
-Content-Type: application/x-www-form-urlencoded
-
-&f=json
-&returnType=data
-&token=<ACCESS_TOKEN>
-
-*/
-
+    })
 }
 
 function exitHandler() {
@@ -936,14 +1331,16 @@ function exitHandler() {
     process.exit(0);
 }
 
-process.on('exit', exitHandler);
-process.on('SIGINT', exitHandler);
-process.on('SIGUSR1', exitHandler);
-process.on('SIGUSR2', exitHandler);
+// process.on('exit', exitHandler);
+// process.on('SIGINT', exitHandler);
+// process.on('SIGUSR1', exitHandler);
+// process.on('SIGUSR2', exitHandler);
 // process.on('uncaughtException', exitHandler);
 
 async function runUsageTest() {
     startTime = Date.now();
+    const dateReport = new Date(startTime);
+    process.stdout.write(`ArcGIS Service Usage Generator started at ${dateReport.toLocaleString()} for ${testSwitches.iterations} iterations.\n\n`);
     await getAuthentication();
     if (token != null || authentication != null) {
         reportedServiceURL = false;
@@ -974,8 +1371,13 @@ async function runUsageTest() {
             geoEnrichmentUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);
             reportedServiceURL = false;
         }
+        if (testSwitches.geoenrichmentReport) {
+            geoEnrichmentReportUsageGenerator();
+            reportedServiceURL = false;
+        }
         if (testSwitches.routing) {
             routingUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);    
+            fleetRoutingUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);    
             reportedServiceURL = false;
         }
         if (testSwitches.featureQuery) {
@@ -985,6 +1387,7 @@ async function runUsageTest() {
         if (testSwitches.analysis) {
             reportedServiceURL = false;
             spatialAnalysisUsageGenerator(testSwitches.serviceRequestDelay, testSwitches.iterations);    
+            // spatialAnalysisTestUsageWithFetch(testSwitches.serviceRequestDelay, testSwitches.iterations);    
         }
     } else {
         process.stderr.write(`Cannot authenticate. Verify your authentication configuration.\n`);
