@@ -14,13 +14,19 @@ item_id = input("Enter item id from source organization to copy: ")
 items = gis_source.content.search(item_id) 
 
 def deep_copy_items(item_list):
+    copy_success = False
     for item in item_list:
         try:
             print("Cloning " + item.title)
             gis_target.content.clone_items(items=[item], copy_data=True, search_existing_items=True)
+            copy_success = True
             print("Successfully cloned " + item.title)
         except Exception as e:
+            copy_success = False
             print(e)
-    print("Copy complete")
+    if copy_success:
+        print("Copy complete")
+    else:
+        print("Copy had errors")
 
 deep_copy_items(items)
