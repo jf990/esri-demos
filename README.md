@@ -27,7 +27,7 @@ A set of Leaflet demos using ArcGIS services.
 
 * [Simple Map](./Leaflet/simple-map/index.html) A web page with a Leaflet app using Esri ArcGIS plugins.
 
-### Node.js
+### node-js
 
 * [App token server demo](./node-js/app-token-server-demo/): demonstrates how to build a server using Node.js, Express, ArcGIS REST JS to proxy application token requests with ArcGIS Platform. Intended to be used with [ESM application credentials demo](./JavaScript/esm-app-token-demo).
 
@@ -38,3 +38,7 @@ A set of Leaflet demos using ArcGIS services.
 ### Python
 
 * [Basic JavaScript demo based on ArcGIS API for JavaScript tutorials](./Python/): a simple ArcGIS API for Python Jupyter notebook to help get started with the API, data analysis, and geoprocessing.
+
+* [copyitem.py](./Python/): Python script to copy an item, such as a feature service, from one ArcGIS Online Organization to another. You must have an account in both orgs, and the item id of the source item to copy. Run this with `python copyitem.py`
+
+* [batch-geocode.py](./Python/): use the batch geocode service to geocode a large number of addresses by file upload.
