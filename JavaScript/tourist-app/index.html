@@ -1,0 +1,89 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Tourist demo app</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <style>
+    html, body, #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+    }
+    .controlPanel {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      z-index: 2;
+      display: flex;
+      flex-direction: row;
+      background-color: rgb(221, 237, 237);
+      border: 1px rgb(76, 76, 76);
+      border-radius: 0.5rem;
+      opacity: 1;
+      padding: 8px;
+    }
+    #categoryButtons {
+      display: inline-table;
+      margin-left: 7px;
+      margin-top: 2px;
+      z-index: 2;
+    }
+    .categoryButton {
+      height: 25px;
+      margin-left: 5px;
+      margin-bottom: 5px;
+      box-shadow: 0 1px 2px rgb(76, 76, 76);
+      background-color: var(--calcite-ui-foreground-1);
+    }
+    .categoryButton :host button {
+      block-size: unset;
+      inline-size: unset;
+    }
+    .place-details {
+      --calcite-shell-panel-min-width: 280px;
+    }
+  </style>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.32/esri/themes/light/main.css">
+  <script type="module" src="https://js.arcgis.com/calcite-components/3.0.3/calcite.esm.js"></script>
+  <script src="https://js.arcgis.com/4.32/"></script>
+  </head>
+  <body>
+    <div class="controlPanel">
+      <calcite-label layout="inline" style="margin-top: 10px;">
+        Route
+        <calcite-switch id="route-switch" scale="m"></calcite-switch>
+      </calcite-label>
+      <calcite-label layout="inline" style="margin-top: 10px;">
+        Elevation
+        <calcite-switch id="elevation-switch" scale="m"></calcite-switch>
+      </calcite-label>
+      <calcite-label layout="inline" style="margin-top: 10px;">
+        Traffic
+        <calcite-switch id="traffic-switch" scale="m"></calcite-switch>
+      </calcite-label>
+      <calcite-chip-group
+      id="categoryButtons"
+      label="category-group-label"
+      selection-mode="none"
+      slot="content-center"
+      scale="s"
+      ></calcite-chip-group>
+      <calcite-combobox id="basemap-select" placeholder="Select a basemap" short-heading="Select" selection-mode="single" max-items="3" placeholder-icon="map" value="navigation">
+          <calcite-combobox-item value="navigation" heading="arcgis/navigation" description="Use the map to navigate between places">
+            <img slot="content-end" alt="Navigation basemap" src="./navigation-map.png" style="height:32px; width:32px;">
+          </calcite-combobox-item>
+          <calcite-combobox-item value="imagery" heading="arcgis/imagery" description="Satellite imagery map">
+            <img slot="content-end" alt="Satellite imagery map" src="./imagery-map.png" style="height:32px; width:32px;">
+          </calcite-combobox-item>
+          <calcite-combobox-item value="custom" heading="custom" description="Use your own custom basemap">
+            <img slot="content-end" alt="Custom basemap" src="./custom-map.png" style="height:32px; width:32px;">
+          </calcite-combobox-item>
+      </calcite-combobox>
+    </div>
+    <div id="viewDiv"></div>
+    <script src="./secret.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>
