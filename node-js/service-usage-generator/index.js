@@ -25,15 +25,16 @@ const testSwitches = {
     // Services
     analysis: false,
     featureEdit: false,
-    featureQuery: false,
+    featureQuery: true,
     geocode: false,
-    suggest: true,
+    suggest: false,
     geocodeForStorage: false,
     geocodeClientTest: false,
     geoenrichment: false,
     geoenrichmentReport: false,
-    places: false,
+    places: true,
     routing: false,
+    elevation: false,
     tiles: false,
     // Parameters to tile requests
     tileService: ["vector"], // select any of "image", "vector", "hillshade", or "OSM"
@@ -43,7 +44,7 @@ const testSwitches = {
     nonExistingTiles: false,
     tileRequestDelay: 100,
     // Test flags
-    useDev: false,
+    useDev: true,
     useEnhancedServices: false,
     iterations: 20,
     serviceRequestDelay: 350
@@ -650,7 +651,7 @@ function placesRequest() {
         x: -74.006792,
         y: 40.71164,
         radius: 650,
-        categoryIds: "13000",
+        categoryIds: "63be6904847c3692a84b9bb5",
         pageSize: 20,
         searchText: "bar",
         forStorage: false,
