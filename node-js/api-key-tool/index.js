@@ -3,10 +3,15 @@
  * Report generation requires a logged in user. Update secret.js with your credentials and make
  * sure to keep that file secure.
  */
+import { createApiKey, updateApiKey } from '@esri/arcgis-rest-developer-credentials';
 import { ArcGISIdentityManager } from "@esri/arcgis-rest-request";
 import { createServiceUsageReport } from "./usageReport.js";
 import { ArcGISPrivileges, createAPIKey, resetAPIKey, deleteAPIKey, getAuthenticationItems } from "./arcGISItemHelpers.js";
 import dotenv from "dotenv";
+
+const threeDaysFromToday = new Date();
+threeDaysFromToday.setDate(threeDaysFromToday.getDate() + 3);
+threeDaysFromToday.setHours(23, 59, 59, 999);
 
 /**
  * Log in a user with the credentials set in the credentials store.
@@ -41,7 +46,6 @@ function signIn() {
         timeOffset: 1,
         title: "Usage-last-month"
     };
-
     return createServiceUsageReport(reportOptions, authentication);
 }
 
@@ -85,9 +89,10 @@ async function usageReport() {
                 .then(function(items) {
                     console.log(`getUserAuthenticationItems found ${items.length} items:`);
                     items.forEach(function(item) {
-                        console.log(`id: ${item.id}, title: ${item.title}, type: ${item.type}, created: ${item.created}`);
+                        const createDate = new Date(item.created);
+                        const formattedDate = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(createDate);
+                        console.log(`id: ${item.id}, title: ${item.title}, type: ${item.type}, created: ${formattedDate}`);
                     });
-        
                     createUsageReport(authentication)
                     .then(function() {
                         console.log("done.");
@@ -112,42 +117,78 @@ async function usageReport() {
 }
 
 /**
- * Testing create an API key. @todo: need to figure out what to do with the results. Save it? YML? CSV? JSON? or output JSON on the command line?
+ * Testing create an API key.
+ * @todo: need to figure out what to do with the results. Save it? YML? CSV? JSON? or output JSON on the command line?
  */
-async function createNewAPIKey() {
+async function createNewAPIKey(apiKeyOptions) {
     try {
         signIn()
         .then(function(authentication) {
             if (authentication && authentication.username) {
-
-                const apiKeyOptions = {
-                    title: "John test API key 1",
-                    description: "API key created by automation",
-                    tags: "key, auth, data, map",
-                    privileges: [ArcGISPrivileges.basemaps, ArcGISPrivileges.geocode, ArcGISPrivileges.route, ArcGISPrivileges.analysisSpatial],
-                    httpReferrers: [],
-                    redirect_uris: []
-                };
-
-                createAPIKey(apiKeyOptions, authentication)
-                .then(function(apiKeyDetails) {
-                    console.log(`createAPIKey says ` + JSON.stringify(apiKeyDetails));
-                })
-                .catch(function(error) {
-                    console.log("createAPIKey error: " + error.toString());
+                apiKeyOptions.authentication = authentication;
+                createApiKey(apiKeyOptions).then(function(registeredAPIKey) {
+                    const itemId = registeredAPIKey.itemId;
+                    const accessToken = registeredAPIKey.accessToken1;
+                    const expireTime = registeredAPIKey.item.apiToken1ExpirationDate;
+                    console.log(`createApiKey  new item ${itemId} token ${accessToken} expires ${expireTime}`);
+                }).catch(function(error) {
+                    console.log(`createAPIKey error ${error.code}: ${error.originalMessage} ${JSON.stringify(error.response)}`);
                     process.exit(90);
-                })
+                });
             } else {
                 console.log("createAPIKey Login error: invalid login.");
                 process.exit(91);
             }
         })
         .catch(function(loginError) {
-            console.log("createAPIKey Login error: " + loginError.toString());
+            console.log("createAPIKey Login error: " + loginError.toString() + " Check your credentials.");
             process.exit(92);
         });
     } catch (loginError) {
         console.log("createAPIKey Login error: " + loginError.toString());
+        process.exit(93);
+    }
+}
+
+/**
+ * update an existing API key.
+ * @param {string} itemId of the portal item that holds the api key.
+ */
+async function updateAPIKey(itemId) {
+    // Add places priv, remove referrers, update expire time
+    try {
+        signIn()
+        .then(function(authentication) {
+            if (authentication && authentication.username) {
+                const apiKeyOptions = {
+                    itemId: itemId,
+                    privileges: [ArcGISPrivileges.basemaps, ArcGISPrivileges.geocode, ArcGISPrivileges.elevation, ArcGISPrivileges.places, ArcGISPrivileges.beta],
+                    httpReferrers: [],
+                    generateToken1: true,
+                    apiToken1ExpirationDate: threeDaysFromToday,
+                    authentication: authentication,
+                };
+
+                updateApiKey(apiKeyOptions).then(function(registeredAPIKey) {
+                    const itemId = registeredAPIKey.itemId;
+                    const accessToken = registeredAPIKey.accessToken1;
+                    const expireTime = registeredAPIKey.item.apiToken1ExpirationDate;
+                    console.log(`updateApiKey  updated item ${itemId} token ${accessToken} expires ${expireTime}`);
+                }).catch(function(error) {
+                    console.log(`updateAPIKey error ${error.code}: ${error.originalMessage} ${JSON.stringify(error.response)}`);
+                    process.exit(90);
+                });
+            } else {
+                console.log("updateAPIKey Login error: invalid login.");
+                process.exit(91);
+            }
+        })
+        .catch(function(loginError) {
+            console.log("updateAPIKey Login error: " + loginError.toString() + " Check your credentials.");
+            process.exit(92);
+        });
+    } catch (loginError) {
+        console.log("updateAPIKey Login error: " + loginError.toString());
         process.exit(93);
     }
 }
@@ -214,26 +255,20 @@ async function createNewAPIKey() {
     }
 }
 
-// usageReport();
-createNewAPIKey();
+const apiKeyOptions = {
+    title: "John test API key 1",
+    description: "API key created by automation",
+    tags: ["api-key", "auth", "demo"],
+    privileges: [ArcGISPrivileges.basemaps, ArcGISPrivileges.geocode, ArcGISPrivileges.elevation, ArcGISPrivileges.beta],
+    httpReferrers: ["http://localhost:8000", "https://localhost:8000"],
+    redirect_uris: [],
+    generateToken1: true,
+    apiToken1ExpirationDate: threeDaysFromToday,
+    authentication: null,
+};
+// createNewAPIKey();
 
-/*
-HermanMunseter key
-createAPIKey says {"itemId":"37d58e4210004e1597feb35db7be91ba","client_id":"dXbgXt4symAfULs1","client_secret":"bae9ee44434f400f9f933117a9dea4b0","appType":"apikey","redirect_uris":[],"registered":1666306403000,"modified":1666306403000,"apnsProdCert":null,"apnsSandboxCert":null,"gcmApiKey":null,"httpReferrers":[],"privileges":["premium:user:geocode:temporary","premium:user:spatialanalysis","premium:user:networkanalysis:routing","portal:apikey:basemaps"],"isBeta":false,"apiKey":"AAPK2eecd45fb0e149c58c0e8b38d75b6f98sNma3hWT28H_SMOR7NYoEY3Sc-gID-6O2hqmRgjfRjKoR6850qqe9lzUXXJEN6vj"}
+const apiKeyItemId = "c12bdcf80bac4f698ba08636edcbd02e";
+// updateAPIKey(apiKeyItemId);
 
-POTesting key
-createAPIKey says {"itemId":"c53ff30861da4b0a885cda50021b2816","client_id":"Avj7JHYMB3kDM2TI","client_secret":"ef46918798324d268793fe6e14405d56","appType":"apikey","redirect_uris":[],"registered":1666309055000,"modified":1666309055000,"apnsProdCert":null,"apnsSandboxCert":null,"gcmApiKey":null,"httpReferrers":[],"privileges":["premium:user:geocode:temporary","premium:user:spatialanalysis","premium:user:networkanalysis:routing","portal:apikey:basemaps"],"isBeta":false,"apiKey":"AAPK1678e42cdc2a4a6ea32092fd48782197hqRNXXisSdCripFSqjvmPB_3umRCoep0s8U0iMfV5UJXRkiNosuFZnw1fvERmEzY"}
-*/
-
-// HermanMunseter key
-// const clientId = "dXbgXt4symAfULs1";
-// const itemId = "37d58e4210004e1597feb35db7be91ba";
-// POTesting key
-// const clientId = "Avj7JHYMB3kDM2TI";
-// const itemId = "c53ff30861da4b0a885cda50021b2816";
-// const apiKey = "AAPK1678e42cdc2a4a6ea32092fd48782197hqRNXXisSdCripFSqjvmPB_3umRCoep0s8U0iMfV5UJXRkiNosuFZnw1fvERmEzY";
-
-// resetExistingAPIKey(clientId, itemId);
-
-// deleteExistingAPIKey(itemId);
-
+usageReport();

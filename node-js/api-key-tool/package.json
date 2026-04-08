@@ -1,12 +1,12 @@
 {
-    "name": "ArcGIS usage report",
+    "name": "arcgis-usage-report",
     "version": "1.0.0",
     "description": "Generate a usage report on your account API keys and OAuth apps",
     "main": "index.js",
     "type": "module",
     "scripts": {
         "start": "node ./index.js",
-        "test": "echo No tests available."
+        "test": "echo No tests available, just run npm start."
     },
     "keywords": [
         "usage",
@@ -16,9 +16,10 @@
     "author": "jf",
     "license": "Apache 2.0",
     "dependencies": {
-        "@esri/arcgis-rest-request": "^4.0.3",
-        "@esri/arcgis-rest-portal": "^4.0.3",
-        "dotenv": "^16.0.1",
-        "yargs": "^17.5.1"
+        "@esri/arcgis-rest-developer-credentials": "^4.10.1",
+        "@esri/arcgis-rest-portal": "^4.10.1",
+        "@esri/arcgis-rest-request": "^4.10.1",
+        "dotenv": "^17.4.0",
+        "yargs": "^18.0.0"
     }
 }

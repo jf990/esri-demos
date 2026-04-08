@@ -3,12 +3,13 @@
  * getAuthenticationItems: get an array of the users authentication items (OAuth apps and API keys.)
  * createAPIKey: create a new API key.
  */
-
 import { searchItems, SearchQueryBuilder, createItem } from "@esri/arcgis-rest-portal";
 import { request } from "@esri/arcgis-rest-request";
 
 const ArcGISPrivileges = {
-    basemaps:               "portal:apikey:basemaps",
+    basemaps:               "premium:user:basemaps",
+    basemapsStatic:         "premium:user:staticbasemaptiles",
+    places:                 "premium:user:places",
     geocodeStored:          "premium:user:geocode:stored",
     geocode:                "premium:user:geocode:temporary",
     elevation:              "premium:user:elevation",
@@ -22,9 +23,12 @@ const ArcGISPrivileges = {
     routeAllocation:        "premium:user:networkanalysis:locationallocation",
     routeVRP:               "premium:user:networkanalysis:vehiclerouting",
     routeClosestFacility:   "premium:user:networkanalysis:closestfacility",
+    routeSnapToRoads:       "premium:user:networkanalysis:snaptoroads",
+    routeLastMileDelivery:  "premium:user:networkanalysis:lastmiledelivery",
     analysisSpatial:        "premium:user:spatialanalysis",
     analysisRaster:         "premium:publisher:rasteranalysis",
     geoanalytics:           "premium:publisher:geoanalytics",
+    beta:                   "portal:user:allowBetaAccess",
     item:                   "portal:app:access:item:"
 };
 
