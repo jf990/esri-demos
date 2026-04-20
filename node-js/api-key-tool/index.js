@@ -1,12 +1,12 @@
 /**
  * Generate usage reports of your ArcGIS Platform authentication (OAuth apps and API keys.)
- * Report generation requires a logged in user. Update secret.js with your credentials and make
+ * Report generation requires a logged in user. Update .env with your credentials and make
  * sure to keep that file secure.
  */
 import { createApiKey, updateApiKey } from '@esri/arcgis-rest-developer-credentials';
 import { ArcGISIdentityManager } from "@esri/arcgis-rest-request";
 import { createServiceUsageReport } from "./usageReport.js";
-import { ArcGISPrivileges, createAPIKey, resetAPIKey, deleteAPIKey, getAuthenticationItems } from "./arcGISItemHelpers.js";
+import { ArcGISPrivileges, getAuthenticationItems } from "./arcGISItemHelpers.js";
 import dotenv from "dotenv";
 
 const threeDaysFromToday = new Date();
@@ -271,4 +271,4 @@ const apiKeyOptions = {
 const apiKeyItemId = "c12bdcf80bac4f698ba08636edcbd02e";
 // updateAPIKey(apiKeyItemId);
 
-usageReport();
+// usageReport();
