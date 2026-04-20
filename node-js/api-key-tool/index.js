@@ -126,7 +126,8 @@ async function createNewAPIKey(apiKeyOptions) {
         .then(function(authentication) {
             if (authentication && authentication.username) {
                 apiKeyOptions.authentication = authentication;
-                createApiKey(apiKeyOptions).then(function(registeredAPIKey) {
+                createApiKey(apiKeyOptions)
+                .then(function(registeredAPIKey) {
                     const itemId = registeredAPIKey.itemId;
                     const accessToken = registeredAPIKey.accessToken1;
                     const expireTime = registeredAPIKey.item.apiToken1ExpirationDate;
@@ -256,7 +257,7 @@ async function updateAPIKey(itemId) {
 }
 
 const apiKeyOptions = {
-    title: "John test API key 1",
+    title: "John test API key 2",
     description: "API key created by automation",
     tags: ["api-key", "auth", "demo"],
     privileges: [ArcGISPrivileges.basemaps, ArcGISPrivileges.geocode, ArcGISPrivileges.elevation, ArcGISPrivileges.beta],
@@ -266,7 +267,7 @@ const apiKeyOptions = {
     apiToken1ExpirationDate: threeDaysFromToday,
     authentication: null,
 };
-// createNewAPIKey();
+createNewAPIKey(apiKeyOptions);
 
 const apiKeyItemId = "c12bdcf80bac4f698ba08636edcbd02e";
 // updateAPIKey(apiKeyItemId);
