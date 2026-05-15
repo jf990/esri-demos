@@ -2,3 +2,4 @@ secret.js
 node_modules
 *.env
 .env
+*.csv

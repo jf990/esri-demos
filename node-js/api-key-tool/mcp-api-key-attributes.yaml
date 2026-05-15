@@ -1,0 +1,13 @@
+options:
+  title: "Esri Dev test API key for MCP test"
+  description: "API key created by automation used to support the MCP beta test for location services."
+  tags: ["api-key", "auth", "demo", "mcp", "beta", "test"]
+  privileges: ["portal:user:allowBetaAccess", "premium:user:geocode:stored", "premium:user:elevation", "premium:user:networkanalysis", "premium:user:networkanalysis:routing"]
+  httpReferrers: ["http://localhost:8000", "https://localhost:8000"]
+  redirect_uris: []
+  generateToken1: true
+  apiToken1ExpirationDate: "2026-05-31"
+  apiToken1ExpirationDays: 3
+  generateToken2: false
+  apiToken2ExpirationDate: "2026-05-31"
+  apiToken2ExpirationDays: 3

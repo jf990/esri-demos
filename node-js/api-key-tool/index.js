@@ -7,11 +7,144 @@ import { createApiKey, updateApiKey } from '@esri/arcgis-rest-developer-credenti
 import { ArcGISIdentityManager } from "@esri/arcgis-rest-request";
 import { createServiceUsageReport } from "./usageReport.js";
 import { ArcGISPrivileges, getAuthenticationItems } from "./arcGISItemHelpers.js";
+import fsExtra from "fs-extra";
+import YAML from "yaml";
 import dotenv from "dotenv";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
+import chalk from "chalk";
+const log = console.log;
 
-const threeDaysFromToday = new Date();
-threeDaysFromToday.setDate(threeDaysFromToday.getDate() + 3);
-threeDaysFromToday.setHours(23, 59, 59, 999);
+// Template for API key parameters that should be set from options.yaml file
+const apiKeyOptions = {
+    title: "",
+    description: "",
+    tags: [],
+    privileges: [],
+    httpReferrers: [],
+    redirect_uris: [],
+    generateToken1: false,
+    apiToken1ExpirationDate: "",
+    apiToken1ExpirationDays: 0,
+    generateToken2: false,
+    apiToken2ExpirationDate: "",
+    apiToken2ExpirationDays: 0,
+    authentication: null,
+};
+
+/**
+ * Return a Date object set at the date some number of days from today.
+ * @param {integer} daysUntilExpiration Number of days from today.
+ * @returns {Date} A date object set at the number of days from today.
+ */
+function getRelativeExpireDate(daysUntilExpiration) {
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + daysUntilExpiration);
+    expirationDate.setHours(23, 59, 59, 999);
+    return expirationDate;
+}
+
+/**
+ * A basic wait function to pause things briefly so we don't overload the server.
+ * @param {integer} milliseconds Time to wait.
+ */
+function sleeper (milliseconds) {
+    new Promise(function(resolve) {
+        setTimeout(resolve, milliseconds);
+    });
+}
+
+
+/**
+ * Determine the api key expiration date by considering 2 values. The first is a real date,
+ * hopefully in the future, in a form that is parsable by the Date object. If this is not
+ * provided or invalid, then use the second parameter as the number of days from today.
+ * @param {string} fullDate Date string. If null or empty will then look at numberOfDays.
+ * @param {integer} numberOfDays Number of days from today. Looked at only if fullDate is not provided. Must be a positive integer. Example: 3 means 3 days from today.
+ * @return {integer} Date timestamp to use as API key expiration date.
+ */
+function dateFromOptions(fullDate, numberOfDays) {
+    let expirationDate;
+    if (fullDate) {
+        expirationDate = new Date(fullDate);
+        if (expirationDate.valueOf() === NaN) {
+            expirationDate = getRelativeExpireDate(numberOfDays ?? 3);
+        }
+    } else {
+        expirationDate = getRelativeExpireDate(numberOfDays ?? 3);
+    }
+    return expirationDate.valueOf();
+}
+
+/**
+ * Read the options YAML file and validate and copy options into the options
+ * template used to create or update API keys.
+ * @param {string} filePath Path to a YAML file with API key option attributes.
+ * @return {object|null} an object created from the YAML data, or null if error.
+ */
+function loadOptions(filePath) {
+    let optionsFile;
+    try {
+        optionsFile = fsExtra.readFileSync(filePath, "utf8");
+    } catch (exception) {
+        log(chalk.red(`Error reading options file ${filePath}: ${exception.message}`));
+    }
+    try {
+        const options = YAML.parse(optionsFile);
+        if (options) {
+            let localOptions = options.options ? options.options : options;
+            apiKeyOptions.title = localOptions.title ?? "No title";
+            apiKeyOptions.description = localOptions.description ?? "No description provided.";
+            apiKeyOptions.tags = JSON.stringify(localOptions.tags ?? []);
+            apiKeyOptions.privileges = JSON.stringify(localOptions.privileges ?? []);
+            apiKeyOptions.httpReferrers = JSON.stringify(localOptions.referrers ?? []);
+            apiKeyOptions.redirect_uris = JSON.stringify(localOptions.redirect_uris ?? []);
+            apiKeyOptions.generateToken1 = localOptions.generateToken1 ?? true;
+            apiKeyOptions.apiToken1ExpirationDate = dateFromOptions(localOptions.apiToken1ExpirationDate ?? "", localOptions.apiToken1ExpirationDays ?? 0);
+            apiKeyOptions.generateToken2 = localOptions.generateToken2 ?? false;
+            apiKeyOptions.apiToken1ExpirationDate = dateFromOptions(localOptions.apiToken2ExpirationDate ?? "", localOptions.apiToken2ExpirationDays ?? 0);
+        } else {
+            log(chalk.red(`Invalid or missing API key options in ${filePath}.`));
+        }
+        return apiKeyOptions;
+    } catch (exception) {
+        log(chalk.red(`Error parsing options file YAML: ${exception.message}`));
+    }
+    return null;
+}
+
+function isNumeric(val) {
+  return !isNaN(parseFloat(val)) && isFinite(val);
+}
+
+/**
+ * Save an array as a CSV file. This assumes the array data of the first element
+ * is the same construct as all the elements in the array. The keys of the first
+ * element are used to create the CSV header row.
+ * @param {array} fileData Array of objects to store as a CSV file.
+ * @param {string} filename Where to save the file.
+ */
+async function saveCSVFile(fileData, filename) {
+    const headers = Object.keys(fileData[0]).join(",");
+    const rows = fileData.map(function(row) {
+        const numColumns = Object.keys(row).length;
+        let rowString = "";
+        Object.values(row).forEach(function(value, index) {
+            if ( ! isNumeric(value)) {
+                value = `"${value}"`;
+            }
+            rowString += value + (index < numColumns - 1 ? "," : "");
+        });
+        return rowString;
+    }).join("\n");
+    fsExtra.writeFile(filename, `${headers}\n${rows}`, function(error) {
+        if (error) {
+            log(chalk.red(`Cannot save CSV file: ${error.message}.`));
+        } else {
+            log(chalk.green(`API key tokens saved as ${filename}.`));
+        }
+    });
+}
 
 /**
  * Log in a user with the credentials set in the credentials store.
@@ -67,9 +200,12 @@ function getUserAuthenticationItems(authentication) {
                     description: item.description,
                     snippet: item.snippet,
                     type: item.type,
+                    typeKeywords: item.typeKeywords,
                     created: item.created,
                     modified: item.modified,
-                    tags: item.tags
+                    tags: item.tags,
+                    apiToken1ExpirationDate: item.apiToken1ExpirationDate,
+                    apiToken2ExpirationDate: item.apiToken2ExpirationDate
                 });
             });
             resolve(filteredItems);
@@ -80,6 +216,27 @@ function getUserAuthenticationItems(authentication) {
     });
 }
 
+function localDateFormat(timestamp) {
+    if (timestamp < 1000) {
+        return "0";
+    }
+    const date = new Date(timestamp);
+    return new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+}
+
+function normalizeItemType(type, typeKeywords) {
+    if (type == "API Key") {
+        return type + " (legacy)";
+    }
+    if (typeKeywords.includes("APIToken")) {
+        return "API key";
+    }
+    return type;
+}
+
+/**
+ * Generate a usage report of all developer credentials for the logged in user.
+ */
 async function usageReport() {
     try {
         signIn()
@@ -87,66 +244,96 @@ async function usageReport() {
             if (authentication && authentication.username) {
                 getUserAuthenticationItems(authentication)
                 .then(function(items) {
-                    console.log(`getUserAuthenticationItems found ${items.length} items:`);
+                    log(`${process.env.ARCGIS_USER_NAME} has ${items.length} developer credentials:`);
+                    const reducedItems = [];
                     items.forEach(function(item) {
-                        const createDate = new Date(item.created);
-                        const formattedDate = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(createDate);
-                        console.log(`id: ${item.id}, title: ${item.title}, type: ${item.type}, created: ${formattedDate}`);
+                        reducedItems.push({
+                            itemId: item.id,
+                            title: item.title,
+                            type: normalizeItemType(item.type, item.typeKeywords),
+                            created: localDateFormat(item.created),
+                            modified: localDateFormat(item.modified),
+                            apiToken1ExpirationDate: localDateFormat(item.apiToken1ExpirationDate),
+                            apiToken2ExpirationDate: localDateFormat(item.apiToken2ExpirationDate)
+                        });
                     });
+                    saveCSVFile(reducedItems, "authentication-items.csv");
                     createUsageReport(authentication)
                     .then(function() {
-                        console.log("done.");
+                        log("done.");
                     })
                     .catch(function(exception) {
-                        console.log("Report generation failed: " + exception.toString());
+                        log("Report generation failed: " + exception.toString());
                     });
                 });
             } else {
-                console.log("Login error: invalid login.");
+                log("Login error: invalid login.");
                 process.exit(91);
             }
         })
         .catch(function(loginError) {
-            console.log("Login error: " + loginError.toString());
+            log("Login error: " + loginError.toString());
             process.exit(92);
         });
     } catch (loginError) {
-        console.log("Login error: " + loginError.toString());
+        log("Login error: " + loginError.toString());
         process.exit(93);
     }
 }
 
 /**
- * Testing create an API key.
- * @todo: need to figure out what to do with the results. Save it? YML? CSV? JSON? or output JSON on the command line?
+ * Create API key(s) given object of apiKeyOptions and numberOfKeys.
+ * @param {object} apiKeyOptions API attributes.
+ * @param {integer} numberOfKeys Number of keys to create.
  */
-async function createNewAPIKey(apiKeyOptions) {
+async function createNewAPIKeys(apiKeyOptions, numberOfKeys) {
+    if (numberOfKeys < 1) {
+        numberOfKeys = 1;
+    }
     try {
         signIn()
-        .then(function(authentication) {
+        .then(async function(authentication) {
             if (authentication && authentication.username) {
+                const newKeys = [];
                 apiKeyOptions.authentication = authentication;
-                createApiKey(apiKeyOptions)
-                .then(function(registeredAPIKey) {
-                    const itemId = registeredAPIKey.itemId;
-                    const accessToken = registeredAPIKey.accessToken1;
-                    const expireTime = registeredAPIKey.item.apiToken1ExpirationDate;
-                    console.log(`createApiKey  new item ${itemId} token ${accessToken} expires ${expireTime}`);
-                }).catch(function(error) {
-                    console.log(`createAPIKey error ${error.code}: ${error.originalMessage} ${JSON.stringify(error.response)}`);
-                    process.exit(90);
-                });
+                const title = apiKeyOptions.title;
+                for (let i = 1; i <= numberOfKeys; i ++) {
+                    apiKeyOptions.title = title + (numberOfKeys > 1 ? ` - (${i})` : "");
+                    createApiKey(apiKeyOptions)
+                    .then(function(registeredAPIKey) {
+                        const itemId = registeredAPIKey.itemId;
+                        const accessToken = registeredAPIKey.accessToken1;
+                        const expireTime = registeredAPIKey.item.apiToken1ExpirationDate;
+                        log(chalk.yellow(`New API key ${itemId} expires ${expireTime} token ${accessToken}`));
+                        newKeys.push({
+                            itemID: itemId,
+                            title: registeredAPIKey.item.title,
+                            expires: expireTime,
+                            token: accessToken,
+                            privileges: apiKeyOptions.privileges
+                        });
+                        if (newKeys.length >= numberOfKeys) {
+                            saveCSVFile(newKeys, "api-keys.csv");
+                        }
+                    }).catch(function(error) {
+                        log(chalk.red(`createAPIKey error ${error.code}: ${error.originalMessage} ${JSON.stringify(error.response)}`));
+                        process.exit(90);
+                    });
+                    if (i > 1) {
+                        await sleeper(1000);
+                    }
+                }
             } else {
-                console.log("createAPIKey Login error: invalid login.");
+                log(chalk.red("createAPIKey Login error: invalid login."));
                 process.exit(91);
             }
         })
         .catch(function(loginError) {
-            console.log("createAPIKey Login error: " + loginError.toString() + " Check your credentials.");
+            log("createAPIKey Login error: " + loginError.toString() + " Check your credentials.");
             process.exit(92);
         });
     } catch (loginError) {
-        console.log("createAPIKey Login error: " + loginError.toString());
+        log("createAPIKey Login error: " + loginError.toString());
         process.exit(93);
     }
 }
@@ -166,7 +353,7 @@ async function updateAPIKey(itemId) {
                     privileges: [ArcGISPrivileges.basemaps, ArcGISPrivileges.geocode, ArcGISPrivileges.elevation, ArcGISPrivileges.places, ArcGISPrivileges.beta],
                     httpReferrers: [],
                     generateToken1: true,
-                    apiToken1ExpirationDate: threeDaysFromToday,
+                    apiToken1ExpirationDate: getRelativeExpireDate(3),
                     authentication: authentication,
                 };
 
@@ -174,22 +361,22 @@ async function updateAPIKey(itemId) {
                     const itemId = registeredAPIKey.itemId;
                     const accessToken = registeredAPIKey.accessToken1;
                     const expireTime = registeredAPIKey.item.apiToken1ExpirationDate;
-                    console.log(`updateApiKey  updated item ${itemId} token ${accessToken} expires ${expireTime}`);
+                    log(`updateApiKey  updated item ${itemId} token ${accessToken} expires ${expireTime}`);
                 }).catch(function(error) {
-                    console.log(`updateAPIKey error ${error.code}: ${error.originalMessage} ${JSON.stringify(error.response)}`);
+                    log(`updateAPIKey error ${error.code}: ${error.originalMessage} ${JSON.stringify(error.response)}`);
                     process.exit(90);
                 });
             } else {
-                console.log("updateAPIKey Login error: invalid login.");
+                log("updateAPIKey Login error: invalid login.");
                 process.exit(91);
             }
         })
         .catch(function(loginError) {
-            console.log("updateAPIKey Login error: " + loginError.toString() + " Check your credentials.");
+            log("updateAPIKey Login error: " + loginError.toString() + " Check your credentials.");
             process.exit(92);
         });
     } catch (loginError) {
-        console.log("updateAPIKey Login error: " + loginError.toString());
+        log("updateAPIKey Login error: " + loginError.toString());
         process.exit(93);
     }
 }
@@ -204,23 +391,23 @@ async function updateAPIKey(itemId) {
             if (authentication && authentication.username) {
                 resetAPIKey(clientID, itemID, authentication)
                 .then(function(serverResponse) {
-                    console.log(`resetAPIKey says ` + JSON.stringify(serverResponse));
+                    log(`resetAPIKey says ` + JSON.stringify(serverResponse));
                 })
                 .catch(function(error) {
-                    console.log("resetAPIKey error: " + error.toString());
+                    log("resetAPIKey error: " + error.toString());
                     process.exit(90);
                 })
             } else {
-                console.log("resetAPIKey Login error: invalid login.");
+                log("resetAPIKey Login error: invalid login.");
                 process.exit(91);
             }
         })
         .catch(function(loginError) {
-            console.log("resetAPIKey Login error: " + loginError.toString());
+            log("resetAPIKey Login error: " + loginError.toString());
             process.exit(92);
         });
     } catch (loginError) {
-        console.log("resetAPIKey Login error: " + loginError.toString());
+        log("resetAPIKey Login error: " + loginError.toString());
         process.exit(93);
     }
 }
@@ -235,41 +422,129 @@ async function updateAPIKey(itemId) {
             if (authentication && authentication.username) {
                 deleteAPIKey(itemID, authentication)
                 .then(function(serverResponse) {
-                    console.log(`deleteAPIKey says ` + JSON.stringify(serverResponse));
+                    log(`deleteAPIKey says ` + JSON.stringify(serverResponse));
                 })
                 .catch(function(error) {
-                    console.log("deleteAPIKey error: " + error.toString());
+                    log("deleteAPIKey error: " + error.toString());
                     process.exit(90);
                 })
             } else {
-                console.log("deleteAPIKey Login error: invalid login.");
+                log("deleteAPIKey Login error: invalid login.");
                 process.exit(91);
             }
         })
         .catch(function(loginError) {
-            console.log("deleteAPIKey Login error: " + loginError.toString());
+            log("deleteAPIKey Login error: " + loginError.toString());
             process.exit(92);
         });
     } catch (loginError) {
-        console.log("deleteAPIKey Login error: " + loginError.toString());
+        log("deleteAPIKey Login error: " + loginError.toString());
         process.exit(93);
     }
 }
 
-const apiKeyOptions = {
-    title: "John test API key 2",
-    description: "API key created by automation",
-    tags: ["api-key", "auth", "demo"],
-    privileges: [ArcGISPrivileges.basemaps, ArcGISPrivileges.geocode, ArcGISPrivileges.elevation, ArcGISPrivileges.beta],
-    httpReferrers: ["http://localhost:8000", "https://localhost:8000"],
-    redirect_uris: [],
-    generateToken1: true,
-    apiToken1ExpirationDate: threeDaysFromToday,
-    authentication: null,
-};
-createNewAPIKey(apiKeyOptions);
+/**
+ * Inspect an API key to determine its properties. This can be used to check the owner, privileges, and expiration date of an API key.
+ * @param {string} token ArcGIS access token (API key or OAuth user token).
+ * @returns {object|null} The app info details or null if there was an error.
+ */
+async function inspectAPIKey(token) {
+    const serviceURL = "https://www.arcgis.com/sharing/rest/portals/self?f=json&token=";
 
-const apiKeyItemId = "c12bdcf80bac4f698ba08636edcbd02e";
-// updateAPIKey(apiKeyItemId);
+    if (token !== "") {
+        try {
+            const response = await fetch(`${serviceURL}${encodeURIComponent(token)}`, {
+                method: "GET",
+                headers: {
+                    Accept: "application/json"
+                }
+            });
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status} ${response.statusText}`);
+            }
+            const jsonResponse = await response.json();
+            if (jsonResponse.error) {
+                // { error: { code: 498, message: 'Invalid token.', details: [] } }
+                log(chalk.red(`Error ${jsonResponse.error.code}: ${jsonResponse.error.message}`));
+            } else {
+                log(jsonResponse);
+                const reducedResponse = {
+                    owner: jsonResponse.name,
+                    subscriptionId: jsonResponse.subscriptionInfo.id,
+                    subscriptionType: jsonResponse.subscriptionInfo.type,
+                    appId: jsonResponse.appInfo.appId,
+                    appTitle: jsonResponse.appInfo.appTitle,
+                    itemId: jsonResponse.appInfo.itemId,
+                    expirationDate: jsonResponse.appInfo.expirationDate,
+                    privileges: jsonResponse.appInfo.privileges
+                };
+                log(chalk.blue(`API key info:`));
+                log(chalk.yellow(JSON.stringify(reducedResponse, null, 2)));
+            }
+            return jsonResponse;
+        } catch (exception) {
+            log(chalk.red(`inspectAPIKey request failed: ${exception.message}`));
+        }
+    } else {
+        log(chalk.red("inspectAPIKey requires a non-empty token."));
+    }
+    return null;
+}
 
-// usageReport();
+/**
+ * Read the command line for any processing options.
+ * @returns {Object} Options are returned as an object of key/value pairs.
+ */
+function getCommandLineParameters() {
+    const args = yargs(hideBin(process.argv)).parse();
+    return args;
+}
+
+/**
+ * Pick up command line arguments and invoke the requested tasks
+ * -a genkeys: generate new API keys using apiKeyOptions template -n numberOfKeys
+ * -a inspect: show properties for a single api key -t token
+ * -a report: generate API keys report as CSV file
+ * -a updatekey: change configuration properties of an existing key
+ * -a delkey: delete an existing api key.
+ * -a resetkey: revoke all tokens on an existing api key.
+ */
+function performRequestAction() {
+    const args = getCommandLineParameters();
+    const action = args.a ?? "report";
+
+    switch(action) {
+      case "genkeys":
+        // create new API keys
+        const numberOfKeys = args.n ?? 1;
+        const optionsFile = args.o ?? "./mcp-api-key-attributes.yaml";
+        const sessionApiKeyOptions = loadOptions(optionsFile);
+        if (sessionApiKeyOptions) {
+            log(chalk.blue(`generate ${numberOfKeys} keys with options ${optionsFile} that will expire on ${sessionApiKeyOptions.apiToken1ExpirationDate}`));
+            createNewAPIKeys(sessionApiKeyOptions, numberOfKeys);
+        }
+        break;
+      case "report":
+        // generate a report of all developer credentials
+        usageReport();
+        break;
+      case "inspect":
+        // inspect properties of a single api key
+        const token = args.t ?? "";
+        inspectAPIKey(token);
+        break;
+      case "updatekey":
+        // update properties of a single api key
+        break;
+      case "delkey":
+        // delete an api key
+        break;
+      case "resetkey":
+        // revoke both tokens of a single api key
+        break;
+      default:
+        break;
+    }
+  }
+
+  performRequestAction();

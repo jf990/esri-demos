@@ -31,7 +31,7 @@ function createServiceUsageReport(reportOptions, authentication) {
                 params: parameters
             })
             .then(function(response) {
-                console.log(JSON.stringify(jsonResponse));
+                console.log("Service usage report response:\n" + JSON.stringify(response));
 
                 // wait for task status
 
@@ -40,7 +40,25 @@ function createServiceUsageReport(reportOptions, authentication) {
                 resolve();
             })
             .catch(function(exception) {
-                reject(exception);
+                // ArcGISRequestError: 400: The monthly report is already generated. Report item id: 70ebb99cef5d48738e507b930f3cbacf
+                const message = exception.toString();
+                if (message.indexOf("ArcGISRequestError: 400") >= 0 && message.indexOf("item id:") >= 0) {
+                    const itemId = message.split("item id:")[1].trim();
+                    const itemURL = authentication.portal + "/content/items/" + itemId + "/data";
+                    console.log("Report already exists. Downloading existing report from: " + itemURL);
+                    request(itemURL + "?token=" + authentication.token, {
+                        httpMethod: "GET"
+                    })
+                    .then(function(response) {
+                        console.log("Existing report response:\n" + JSON.stringify(response));
+                        resolve();
+                    })
+                    .catch(function(exception) {
+                        reject(exception);
+                    });
+                } else {
+                    reject(exception);
+                }
             });
         } catch (exception) {
             reject(exception);

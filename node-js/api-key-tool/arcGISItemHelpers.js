@@ -105,13 +105,14 @@ function verifyAPIKeyOptions(options) {
  * @returns {Promise} Resolves with the array of items.
  */
 async function getAuthenticationItems(authentication) {
-    const pageSize = 100;
+    const pageSize = 10;
 
     function getPageOfAuthenticationItems(page) {
-        if (page < 1) {
-            page = 1;
+        let startItem;
+        if (page < 2) {
+            startItem = 1;
         } if (page > 1) {
-            page = ((page - 1) * pageSize) + 1;
+            startItem = ((page - 1) * pageSize) + 1;
         }
         return new Promise(function (resolve, reject) {
             const query = new SearchQueryBuilder()
@@ -125,15 +126,16 @@ async function getAuthenticationItems(authentication) {
               .match("Registered App")
               .in("typekeywords")
             .endGroup();
-            query.start = page;
-            query.num = pageSize;
-    
+
             const options = {
                 authentication: authentication,
                 q: query,
+                start: startItem,
+                num: pageSize,
                 sortField: "created",
                 sortOrder: "desc"
             };
+            console.log(`Querying for items ${startItem} to ${startItem + pageSize - 1}...`);
             searchItems(options)
             .then(function(response) {
                 resolve(response.results);
@@ -153,8 +155,9 @@ async function getAuthenticationItems(authentication) {
             try {
                 let items = await getPageOfAuthenticationItems(nextPage);
                 allItems = allItems.concat(items);
-                if (items.length < pageSize) {
-                    break;
+                if (items.length < pageSize || nextPage > 100) { // if we got less than a full page, or we've paged through 100 pages (1000 items, which is likely more items than any user has), then stop paging and return what we have.
+                    resolve(allItems);
+                    return;
                 }
             } catch (exception) {
                 reject(exception);
