@@ -2,6 +2,8 @@
  * Utility functions to work with ArcGIS Online reports.
  */
 import { ArcGISIdentityManager, request } from "@esri/arcgis-rest-request";
+import fsExtra from "fs-extra";
+import chalk from "chalk";
 
 /**
  * Request the generation an ArcGIS Online service usage report. See doc: https://developers.arcgis.com/rest/users-groups-and-items/reports.htm
@@ -13,7 +15,7 @@ import { ArcGISIdentityManager, request } from "@esri/arcgis-rest-request";
  * @param {ArcGISIdentityManager} authentication A valid logged in user identity.
  * @returns {Promise} Resolves when the report is created.
  */
-function createServiceUsageReport(reportOptions, authentication) {
+async function createServiceUsageReport(reportOptions, authentication) {
     return new Promise(function(resolve, reject) {
         const portalURL = authentication.portal + "/community/users/" + authentication.username + "/report";
         const parameters = {
@@ -39,22 +41,32 @@ function createServiceUsageReport(reportOptions, authentication) {
 
                 resolve();
             })
-            .catch(function(exception) {
+            .catch(async function(exception) {
                 // ArcGISRequestError: 400: The monthly report is already generated. Report item id: 70ebb99cef5d48738e507b930f3cbacf
                 const message = exception.toString();
                 if (message.indexOf("ArcGISRequestError: 400") >= 0 && message.indexOf("item id:") >= 0) {
                     const itemId = message.split("item id:")[1].trim();
                     const itemURL = authentication.portal + "/content/items/" + itemId + "/data";
                     console.log("Report already exists. Downloading existing report from: " + itemURL);
-                    request(itemURL + "?token=" + authentication.token, {
-                        httpMethod: "GET"
-                    })
-                    .then(function(response) {
-                        console.log("Existing report response:\n" + JSON.stringify(response));
-                        resolve();
-                    })
-                    .catch(function(exception) {
-                        reject(exception);
+
+                    const response = await fetch(`${itemURL}?token=${authentication.token}`, {
+                        method: "GET"
+                    });
+
+                    if (!response.ok) {
+                        reject(new Error(`Failed to download report: ${response.status} ${response.statusText}`));
+                        return;
+                    }
+
+                    const fileData = await response.text();
+                    fsExtra.writeFile("api-key-usage-report.csv", fileData, function(error) {
+                        if (error) {
+                            console.log(chalk.red(`Cannot save CSV file: ${error.message}.`));
+                            reject(error);
+                        } else {
+                            console.log(chalk.green("Usage report saved as api-key-usage-report.csv."));
+                            resolve();
+                        }
                     });
                 } else {
                     reject(exception);
