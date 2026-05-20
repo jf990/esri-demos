@@ -3,7 +3,7 @@
  * getAuthenticationItems: get an array of the users authentication items (OAuth apps and API keys.)
  * createAPIKey: create a new API key.
  */
-import { searchItems, SearchQueryBuilder, createItem, updateItem, getItem } from "@esri/arcgis-rest-portal";
+import { searchItems, SearchQueryBuilder, createItem, updateItem, getItem, removeItem } from "@esri/arcgis-rest-portal";
 import { request } from "@esri/arcgis-rest-request";
 
 const ArcGISPrivileges = {
@@ -214,17 +214,13 @@ function getPortalItem(itemID, authentication) {
  * Delete a portal item.
  * @param {string} itemId An item ID to delete. This should be the item ID of the API key item that was returned from `createAPIKey`.
  * @param {ArcGISIdentityManager} authentication A user session is required to delete items.
- * @returns {Promise} Promise that resolves with the server response from the item creation service.
+ * @returns {Promise} Promise that resolves with the server response from the item remove service.
  */
  function deletePortalItem(itemId, authentication) {
-    // POST https://arcgis.com/sharing/rest/content/users/${your-user-name}/items/${item-id}/delete
-
-    const portalServiceUrl = `${authentication.portal}/content/users/${authentication.username}/items/${itemId}/delete`;
-    const itemDeleteOptions = {
-        httpMethod: "POST",
+    return removeItem({
+        id: itemId,
         authentication: authentication
-    };
-    return request(portalServiceUrl, itemDeleteOptions);
+    });
 }
 
 /**

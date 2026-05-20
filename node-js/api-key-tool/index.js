@@ -2,11 +2,14 @@
  * Generate usage reports of your ArcGIS Platform authentication (OAuth apps and API keys.)
  * Report generation requires a logged in user. Update .env with your credentials and make
  * sure to keep that file secure.
+ * 
+ * Issues:
+ * - report gives error "Report generation failed: ArcGISRequestError: HTTP 498: Unknown"
  */
 import { createApiKey, updateApiKey, invalidateApiKey, getApiKey } from '@esri/arcgis-rest-developer-credentials';
 import { ArcGISIdentityManager } from "@esri/arcgis-rest-request";
 import { createServiceUsageReport } from "./usageReport.js";
-import { ArcGISPrivileges, getAuthenticationItems, updatePortalItem, getPortalItem } from "./arcGISItemHelpers.js";
+import { ArcGISPrivileges, getAuthenticationItems, updatePortalItem, getPortalItem, deletePortalItem } from "./arcGISItemHelpers.js";
 import fsExtra from "fs-extra";
 import YAML from "yaml";
 import dotenv from "dotenv";
@@ -17,13 +20,13 @@ const log = console.log;
 
 /**
  * Pick up command line arguments and invoke the requested tasks
- * ✅ -a genkeys: generate new API keys using apiKeyOptions template -n numberOfKeys
+ * ✅ -a genkeys: generate new API keys using apiKeyOptions template -n numberOfKeys -o optionsFilePath
  * ✅ -a inspect: show properties for a single api key -t token or -i itemId
- * -a report: generate API keys report as CSV file
+ * ✅ -a report: generate API keys report as CSV file
  * ✅ -a revoke: revoke a token on an existing api key, -i ArcGIS itemID of the API key to revoke, -k 1/2/all for which token to revoke.
- * ✅ -a regen: generate new tokens for an existing api key. -i ArcGIS itemID of the API key to update, -k 1/2/all for which token to regenerate, -d1 date or daysUntilExpiration -d2 date or daysUntilExpiration.
- * -a update: update an API key meta data such as title, description, tags, privileges, referrers, or redirect URIs. -i ArcGIS itemID of the API key to update, -t title, -d description, -k tags comma separated string, -p privileges comma separated string, -r referrers comma separated string, -u redirect URIs comma separated string.
- * -a delete: delete an existing api key -i ArcGIS itemID of the API key to delete.
+ * ✅ -a regen: generate new tokens for an existing api key. -i ArcGIS itemID of the API key to update, -k 1/2/all for which token to regenerate, -d date or daysUntilExpiration key 1 -e date or daysUntilExpiration key 2.
+ * ✅ -a update: update an API key meta data such as title, description, tags, privileges, referrers, or redirect URIs. -i ArcGIS itemID of the API key to update, -t title, -d description, -k tags comma separated string, -p privileges comma separated string, -r referrers comma separated string, -u redirect URIs comma separated string.
+ * ✅ -a delete: delete an existing api key -i ArcGIS itemID of the API key to delete.
  */
 function performRequestAction() {
     const args = getCommandLineParameters();
@@ -42,7 +45,8 @@ function performRequestAction() {
         break;
       case "report":
         // generate a report of all developer credentials
-        usageReport();
+        const outputFile = args.o ?? "./api-keys.yaml";
+        usageReport(outputFile);
         break;
       case "inspect":
         // inspect properties of a single api key
@@ -62,7 +66,7 @@ function performRequestAction() {
         break;
       case "delete":
         // delete an api key given its item ID
-        deleteAPIKey(args.i ?? "");
+        deleteItem(args.i ?? "");
         break;
       case "revoke":
         // revoke both tokens of a single api key
@@ -253,11 +257,15 @@ async function saveCSVFile(fileData, filename) {
         });
         return rowString;
     }).join("\n");
+    if (filename === "stdout") {
+        log(`${headers}\n${rows}`);
+        return;
+    }
     fsExtra.writeFile(filename, `${headers}\n${rows}`, function(error) {
         if (error) {
             log(chalk.red(`Cannot save CSV file: ${error.message}.`));
         } else {
-            log(chalk.green(`API key tokens saved as ${filename}.`));
+            log(chalk.green(`Data saved as ${filename}.`));
         }
     });
 }
@@ -352,8 +360,9 @@ function normalizeItemType(type, typeKeywords) {
 
 /**
  * Generate a usage report of all developer credentials for the logged in user.
+ * @param {string} outputFile Path to save the report CSV file.
  */
-async function usageReport() {
+async function usageReport(outputFile) {
     try {
         signIn()
         .then(function(authentication) {
@@ -373,7 +382,7 @@ async function usageReport() {
                             apiToken2ExpirationDate: localDateFormat(item.apiToken2ExpirationDate)
                         });
                     });
-                    saveCSVFile(reducedItems, "authentication-items.csv");
+                    saveCSVFile(reducedItems, outputFile);
                     createUsageReport(authentication)
                     .then(function() {
                         log("done.");
@@ -484,20 +493,29 @@ async function updateAPIKeyProperties(args) {
         generateToken2: false,
         authentication: null,
     };
-    const privileges = args.p ?? [];
-    if (!isEmpty(privileges)) {
-        apiKeyOptions.privileges = privileges;
+    const privileges = args.p ?? null;
+    if (privileges !== null) {
+        apiKeyOptions.privileges = privileges.split(",").map(function(element) { return element.trim(); });
         hasAPIKeyUpdateOptions = true;
+        if (apiKeyOptions.privileges.length === 1 && apiKeyOptions.privileges[0] === "") {
+            apiKeyOptions.privileges = [];
+        }
     }
-    const referrers = args.r ?? [];
-    if (!isEmpty(referrers)) {
-        apiKeyOptions.referrers = referrers;
+    const referrers = args.r ?? null;
+    if (referrers !== null) {
+        apiKeyOptions.httpReferrers = referrers.split(",").map(function(element) { return element.trim(); });
         hasAPIKeyUpdateOptions = true;
+        if (apiKeyOptions.httpReferrers.length === 1 && apiKeyOptions.httpReferrers[0] === "") {
+            apiKeyOptions.httpReferrers = [];
+        }
     }
-    const redirectURIs = args.u ?? [];
-    if (!isEmpty(redirectURIs)) {
-        apiKeyOptions.redirectURIs = redirectURIs;
+    const redirectURIs = args.u ?? null;
+    if (redirectURIs !== null) {
+        apiKeyOptions.redirectURIs = redirectURIs.split(",").map(function(element) { return element.trim(); });
         hasAPIKeyUpdateOptions = true;
+        if (apiKeyOptions.redirectURIs.length === 1 && apiKeyOptions.redirectURIs[0] === "") {
+            apiKeyOptions.redirectURIs = [];
+        }
     }
     let itemUpdateOptions = {};
     const title = args.t ?? "";
@@ -521,21 +539,20 @@ async function updateAPIKeyProperties(args) {
             if (authentication && authentication.username) {
                 if (hasAPIKeyUpdateOptions) {
                     apiKeyOptions.authentication = authentication;
+                    log(`updateAPIKey with options ${JSON.stringify(apiKeyOptions)}`);
                     updateApiKey(apiKeyOptions).then(function(registeredAPIKey) {
-                        const itemId = registeredAPIKey.itemId;
-                        const accessToken = registeredAPIKey.accessToken1;
-                        const expireTime = registeredAPIKey.item.apiToken1ExpirationDate;
-                        log(`updateApiKey  updated item ${itemId} token ${accessToken} expires ${expireTime}`);
+                        log(`updateApiKey updated item ${itemId} with response ${JSON.stringify(registeredAPIKey)}`);
                     }).catch(function(error) {
                         log(`updateAPIKey error ${error.code}: ${error.originalMessage} ${JSON.stringify(error.response)}`);
                         process.exit(90);
                     });
-                } else if (hasItemUpdateOptions) {
-                    // update the Item title, description, or tags
+                }
+                if (hasItemUpdateOptions) {
+                    // update the item title, description, or tags
                     itemUpdateOptions.id = itemId;
                     updatePortalItem(itemId, itemUpdateOptions, authentication)
                     .then(function(updatedItem) {
-                        log(`updatePortalItem updated item ${itemId}`);
+                        log(`Updated item ${itemId} with response ${JSON.stringify(updatedItem)}`);
                     })
                     .catch(function(error) {
                         log(`updatePortalItem error ${error.code}: ${error.originalMessage} ${JSON.stringify(error.response)}`);
@@ -562,30 +579,30 @@ async function updateAPIKeyProperties(args) {
  * @todo: untested!
  * @param {string} itemID ArcGIS item identifier of the API key to delete.
  */
- async function deleteExistingAPIKey(itemID) {
+ async function deleteItem(itemID) {
     try {
         signIn()
         .then(function(authentication) {
             if (authentication && authentication.username) {
-                deleteAPIKey(itemID, authentication)
+                deletePortalItem(itemID, authentication)
                 .then(function(serverResponse) {
-                    log(`deleteAPIKey says ` + JSON.stringify(serverResponse));
+                    log(`deleteItem says ` + JSON.stringify(serverResponse));
                 })
                 .catch(function(error) {
-                    log("deleteAPIKey error: " + error.toString());
+                    log("deleteItem error: " + error.toString());
                     process.exit(90);
                 })
             } else {
-                log("deleteAPIKey Login error: invalid login.");
+                log("deleteItem Login error: invalid login.");
                 process.exit(91);
             }
         })
         .catch(function(loginError) {
-            log("deleteAPIKey Login error: " + loginError.toString());
+            log("deleteItem Login error: " + loginError.toString());
             process.exit(92);
         });
     } catch (loginError) {
-        log("deleteAPIKey Login error: " + loginError.toString());
+        log("deleteItem Login error: " + loginError.toString());
         process.exit(93);
     }
 }
