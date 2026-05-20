@@ -5,6 +5,33 @@ import { ArcGISIdentityManager, request } from "@esri/arcgis-rest-request";
 import fsExtra from "fs-extra";
 import chalk from "chalk";
 
+async function downloadReportFile(itemId, authentication) {
+    return new Promise(async function(resolve, reject) {
+        const itemURL = authentication.portal + "/content/items/" + itemId + "/data";
+        console.log(chalk.blue("Downloading report from: " + itemURL));
+
+        const response = await fetch(`${itemURL}?token=${authentication.token}`, {
+            method: "GET"
+        });
+
+        if (!response.ok) {
+            reject(new Error(`Failed to download report: ${response.status} ${response.statusText}`));
+            return;
+        }
+
+        const fileData = await response.text();
+        fsExtra.writeFile("api-key-usage-report.csv", fileData, function(error) {
+            if (error) {
+                console.log(chalk.red(`Cannot save CSV file: ${error.message}.`));
+                reject(error);
+            } else {
+                console.log(chalk.green("Usage report saved as api-key-usage-report.csv."));
+                resolve();
+            }
+        });
+    });
+}
+
 /**
  * Request the generation an ArcGIS Online service usage report. See doc: https://developers.arcgis.com/rest/users-groups-and-items/reports.htm
  * reportOptions.timeDuration is either "weekly" or "monthly".
@@ -21,8 +48,8 @@ async function createServiceUsageReport(reportOptions, authentication) {
         const parameters = {
             f: "json",
             reportType: "org",
-            reportSubType: "serviceUsages",
-            timeDuration: reportOptions.timeDuration,
+            reportSubType: reportOptions.subType ?? "serviceUsages",
+            timeDuration: reportOptions.timeDuration ?? "monthly",
             startTime: determineStartTime(reportOptions).getTime(),
             title: reportOptions.title
         };
@@ -32,13 +59,35 @@ async function createServiceUsageReport(reportOptions, authentication) {
                 authentication: authentication,
                 params: parameters
             })
-            .then(function(response) {
+            .then(async function(response) {
                 console.log("Service usage report response:\n" + JSON.stringify(response));
+                const itemId = response.itemId;
+                const statusURL = `${authentication.portal}/sharing/rest/content/users/${authentication.username}/items/${itemId}/status?token=${authentication.token}`;
+                let taskStatus = response.status;
+                let waitDelay = 3000;
+                let pollCount = 10;
 
-                // wait for task status
+                // wait and poll for task status
+                while (taskStatus === "processing" && pollCount > 0) {
+                    await new Promise(function(resolve) { setTimeout(resolve, waitDelay); });
+                    const statusResponse = await request(statusURL, {
+                        httpMethod: "GET",
+                        authentication: authentication
+                    });
+                    taskStatus = statusResponse.status;
+                    pollCount --;
+                    if (waitDelay > 1000) {
+                        waitDelay -= 1000;
+                    }
+                }
 
                 // download report CSV file
-
+                if (taskStatus === "completed") {
+                    console.log("Report generation completed. Downloading report...");
+                    await downloadReportFile(itemId, authentication);
+                } else {
+                    console.log(chalk.red(`Report generation failed or timed out. Final task status: ${taskStatus}`));
+                }
                 resolve();
             })
             .catch(async function(exception) {
@@ -46,27 +95,13 @@ async function createServiceUsageReport(reportOptions, authentication) {
                 const message = exception.toString();
                 if (message.indexOf("ArcGISRequestError: 400") >= 0 && message.indexOf("item id:") >= 0) {
                     const itemId = message.split("item id:")[1].trim();
-                    const itemURL = authentication.portal + "/content/items/" + itemId + "/data";
-                    console.log("Report already exists. Downloading existing report from: " + itemURL);
-
-                    const response = await fetch(`${itemURL}?token=${authentication.token}`, {
-                        method: "GET"
-                    });
-
-                    if (!response.ok) {
-                        reject(new Error(`Failed to download report: ${response.status} ${response.statusText}`));
-                        return;
-                    }
-
-                    const fileData = await response.text();
-                    fsExtra.writeFile("api-key-usage-report.csv", fileData, function(error) {
-                        if (error) {
-                            console.log(chalk.red(`Cannot save CSV file: ${error.message}.`));
-                            reject(error);
-                        } else {
-                            console.log(chalk.green("Usage report saved as api-key-usage-report.csv."));
-                            resolve();
-                        }
+                    console.log("Report already exists. Downloading existing report from item: " + itemId);
+                    downloadReportFile(itemId, authentication)
+                    .then(function() {
+                        resolve();
+                    })
+                    .catch(function(exception) {
+                        reject(exception);
                     });
                 } else {
                     reject(exception);
@@ -93,11 +128,12 @@ function determineStartTime(reportOptions) {
         // last month (1), or (n) months ago
         startDate = new Date(dateToday.getFullYear(), dateToday.getMonth(), 1);
     } else if (reportOptions.timeDuration == "weekly") {
-        // last week (1), or (n) weeks ago
-        startDate = new Date(dateToday.getFullYear(), dateToday.getMonth(), 1);
+        // last week (1), or (n) weeks ago on Sunday
+        startDate.setDate(startDate.getDate() - startDate.getDay() - 7);
     } else {
         startDate = new Date(dateToday.getFullYear(), dateToday.getMonth(), 1);
     }
+    startDate.setHours(0, 0, 0, 0);
     return startDate;
 }
 

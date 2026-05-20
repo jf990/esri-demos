@@ -3,7 +3,7 @@
  * getAuthenticationItems: get an array of the users authentication items (OAuth apps and API keys.)
  * createAPIKey: create a new API key.
  */
-import { searchItems, SearchQueryBuilder, createItem } from "@esri/arcgis-rest-portal";
+import { searchItems, SearchQueryBuilder, createItem, updateItem, getItem } from "@esri/arcgis-rest-portal";
 import { request } from "@esri/arcgis-rest-request";
 
 const ArcGISPrivileges = {
@@ -187,6 +187,30 @@ function createPortalItem(itemOptions, authentication) {
 }
 
 /**
+ * Update a portal item.
+ * @param {string} itemID The ArcGIS item identifier of the item to update.
+ * @param {object} itemOptions Options used to define item properties to change.
+ * @param {ArcGISIdentityManager} authentication A user session is required to update items.
+ * @returns {Promise} Promise that resolves with the server response from the item update service.
+ */
+function updatePortalItem(itemID, itemOptions, authentication) {
+    return updateItem({
+        item: itemOptions,
+        authentication: authentication
+    });
+}
+
+/**
+ * Get meta data for a portal item.
+ * @param {string} itemID The ArcGIS item identifier of the item to update.
+ * @param {ArcGISIdentityManager} authentication A user session to access the item.
+ * @returns {Promise} Promise that resolves with the server response from the portal service.
+ */
+function getPortalItem(itemID, authentication) {
+    return getItem(itemID, { authentication });
+}
+
+/**
  * Delete a portal item.
  * @param {string} itemId An item ID to delete. This should be the item ID of the API key item that was returned from `createAPIKey`.
  * @param {ArcGISIdentityManager} authentication A user session is required to delete items.
@@ -228,5 +252,9 @@ function registerAPIKeyApp(itemId, itemOptions, authentication) {
 
 export {
     ArcGISPrivileges,
-    getAuthenticationItems
+    getAuthenticationItems,
+    createPortalItem,
+    updatePortalItem,
+    getPortalItem,
+    deletePortalItem
 };
