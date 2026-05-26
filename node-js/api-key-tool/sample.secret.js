@@ -1,2 +1,0 @@
-export const ARCGIS_USER_NAME = "YOUR_USER_NAME";
-export const ARCGIS_USER_PASSWORD = "YOUR_PASSWORD";
