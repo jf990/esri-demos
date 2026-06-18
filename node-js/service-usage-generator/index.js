@@ -25,17 +25,17 @@ const testSwitches = {
     // Services
     analysis: false,
     featureEdit: false,
-    featureQuery: true,
+    featureQuery: false,
     geocode: false,
     suggest: false,
     geocodeForStorage: false,
     geocodeClientTest: false,
     geoenrichment: false,
     geoenrichmentReport: false,
-    places: true,
+    places: false,
     routing: false,
     elevation: false,
-    tiles: false,
+    tiles: true,
     // Parameters to tile requests
     tileService: ["vector"], // select any of "image", "vector", "hillshade", or "OSM"
     startLOD: 3,
